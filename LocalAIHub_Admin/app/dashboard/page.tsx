@@ -1,0 +1,215 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { HiOutlineServerStack } from 'react-icons/hi2'
+import { LuActivity } from 'react-icons/lu'
+import { TbClockHour4 } from 'react-icons/tb'
+import { HiOutlineGlobeAlt } from 'react-icons/hi2'
+import { StatCard } from '@/components/stat-card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { api } from '@/lib/api'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
+import { useRefresh } from '@/components/refresh-context'
+
+export default function DashboardPage() {
+  const [data, setData] = useState<any>(null)
+  const [error, setError] = useState('')
+  const [timeRange, setTimeRange] = useState('1d')
+  const { registerRefresh } = useRefresh()
+
+  async function loadDashboard() {
+    try {
+      const hours = timeRange === '1d' ? 24 : timeRange === '3d' ? 72 : 168
+      const result = await api.dashboard(`?hours=${hours}`)
+      setData(result)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败')
+    }
+  }
+
+  useEffect(() => {
+    registerRefresh(loadDashboard)
+    loadDashboard()
+  }, [timeRange])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadDashboard()
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [timeRange])
+
+  const chartData = data?.request_trend?.map((item: any) => ({
+    time: item.hour?.slice(11, 16) || '',
+    requests: item.count,
+    success: item.success,
+    tokens: (item.total_tokens || 0),
+  })) || []
+
+  const timeRangeLabel = timeRange === '1d' ? '24h' : timeRange === '3d' ? '3天' : '7天'
+
+  const modelData = (data?.model_distribution || []).map((item: any) => ({
+    name: item.model_code,
+    value: item.count,
+  }))
+  const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316']
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Select value={timeRange} onValueChange={setTimeRange}>
+          <SelectTrigger className="w-28">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1d">1 天</SelectItem>
+            <SelectItem value="3d">3 天</SelectItem>
+            <SelectItem value="7d">7 天</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <StatCard title={`请求数 (${timeRangeLabel})`} value={data?.request_count ?? '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} />
+        <StatCard title={`成功率 (${timeRangeLabel})`} value={data ? `${Math.round((data.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} />
+        <StatCard title="平均延迟" value={data?.avg_latency_ms ? `${data.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} />
+        <StatCard title={`Token (${timeRangeLabel})`} value={data?.total_tokens ? `${(data.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} />
+        <StatCard title="上游" value={data?.active_upstream_count ?? '-'} subValue="启用" icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>请求趋势</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ 
+                      background: 'var(--card)', 
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'var(--foreground)' }}
+                  />
+                  <Area type="monotone" dataKey="requests" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorRequests)" name="请求数" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                暂无趋势数据
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Token 趋势</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ 
+                      background: 'var(--card)', 
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'var(--foreground)' }}
+                    formatter={(value: number) => [value.toLocaleString(), 'Token']}
+                  />
+                  <Bar dataKey="tokens" fill="#8b5cf6" name="Token" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                暂无 Token 数据
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>模型分布</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {modelData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={modelData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {modelData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                暂无模型数据
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>请求状态</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(59,130,246,0.05)' }}>
+                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>总请求</div>
+                <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{data?.request_count ?? 0}</div>
+              </div>
+              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(16,185,129,0.05)' }}>
+                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>成功</div>
+                <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{data?.success_rate ? Math.round(data.request_count * data.success_rate) : 0}</div>
+              </div>
+              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(239,68,68,0.05)' }}>
+                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>失败</div>
+                <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{data?.request_count ? data.request_count - Math.round(data.request_count * (data.success_rate || 0)) : 0}</div>
+              </div>
+              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(139,92,246,0.05)' }}>
+                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>平均延迟</div>
+                <div className="text-2xl font-bold mt-1" style={{ color: '#8b5cf6' }}>{data?.avg_latency_ms ?? 0}<span className="text-sm font-normal">ms</span></div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {error ? <div className="rounded-xl border px-4 py-3 text-sm" style={{ borderColor: 'rgba(239,95,114,0.25)', background: 'rgba(239,95,114,0.08)', color: '#ffb4bd' }}>{error}</div> : null}
+    </div>
+  )
+}

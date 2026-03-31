@@ -1,0 +1,16 @@
+-- LocalAIHub MVP initial schema placeholder.
+-- Tables to implement based on docs:
+-- admin_user
+-- admin_login_log
+-- api_client
+-- provider
+-- provider_key
+-- virtual_model
+-- virtual_model_binding
+-- route_state
+-- route_switch_log
+-- circuit_breaker_state
+-- debug_session
+-- request_log
+-- audit_log
+-- system_config
