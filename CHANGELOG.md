@@ -1,7 +1,7 @@
 <!--
  * @Author: rookiefish <3209605851@qq.com>
  * @Date: 2026-03-30
- * @LastEditTime: 2026-03-31
+ * @LastEditTime: 2026-03-31 23:59:00
  * @LastEditors: rookiefish <3209605851@qq.com>
  * @Description: LocalAIHub 项目更新日志
 -->
@@ -23,6 +23,9 @@
 
 ## 2026/03/31
 
+- Docs: 新增根目录、`LocalAIHub_GO/README.md` 与 `LocalAIHub_Admin/README.md` 项目说明文档，并统一接入项目 Logo 展示。
+- Security: 补充根目录及后端 `.gitignore` 规则，忽略本地配置文件、环境变量、数据库文件、日志与可执行文件，避免敏感信息误传仓库。
+- Changed: 管理后台登录页、站点图标与侧边栏品牌区统一替换为 `LocalAIHub` Logo，收口项目视觉标识。
 - Added: 分页器新增每页条数选择器（10/30/50/100），支持在所有管理页面自定义每页显示数量。
 - Added: 新增「使用教程」页面，包含快速开始指南、调用示例和注意事项，可从侧边栏「系统管理」入口访问。
 - Changed: 管理后台 API Key 弹窗改为使用 `window.location.origin` 获取当前域名，修复生产环境显示 127.0.0.1 的问题。
