@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+dist/
+.pnp
+.pnp.js
+
+# Build
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.development
+.env.production
+!.env.example
+
+# Config
+LocalAIHub_GO/configs/*.local.yaml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Binary
+bin/
+*.exe
+localaihub.exe
+
+# Test
+coverage/
+
+# Misc
+*.tmp
+temp/

@@ -3,6 +3,10 @@
 .env.local
 .env.production
 
+# Config (keep config.example.yaml)
+configs/config.local.yaml
+configs/*.local.yaml
+
 # Binary
 bin/
 *.exe
