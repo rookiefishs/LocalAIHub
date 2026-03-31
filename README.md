@@ -1,6 +1,12 @@
 # LocalAIHub
 
-本地 AI 中转网关与管理后台，提供 OpenAI 兼容协议的 AI 请求转发和管理功能。
+<p align="center">
+  <img src="logo.png" alt="LocalAIHub Logo" width="128" height="128" />
+</p>
+
+<p align="center">
+  本地 AI 中转网关与管理后台，提供 OpenAI 兼容协议的 AI 请求转发和管理功能。
+</p>
 
 ## 项目简介
 

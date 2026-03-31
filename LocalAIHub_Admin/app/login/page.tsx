@@ -4,7 +4,6 @@ import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { HiOutlineLockClosed } from 'react-icons/hi2'
 import { IoEyeOffOutline, IoEyeOutline, IoEnterOutline } from 'react-icons/io5'
-import { TbTopologyStarRing3 } from 'react-icons/tb'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,9 +43,7 @@ export default function LoginPage() {
       <div className="w-full max-w-[440px]">
         <div className="mb-8 flex flex-col items-start gap-4">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl border p-3" style={{ background: 'rgba(56, 201, 212, 0.10)', borderColor: 'rgba(56, 201, 212, 0.20)' }}>
-              <TbTopologyStarRing3 className="h-8 w-8" style={{ color: 'var(--primary)' }} />
-            </div>
+            <img src="/logo.png" alt="LocalAIHub" className="h-12 w-12 rounded-xl" />
             <div>
               <h1 className="text-xl font-medium" style={{ color: 'var(--foreground)' }}>LocalAIHub</h1>
             </div>

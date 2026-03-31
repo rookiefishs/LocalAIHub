@@ -1,6 +1,12 @@
 # LocalAIHub_Admin
 
-LocalAIHub 管理后台，基于 Next.js App Router 构建。
+<p align="center">
+  <img src="../logo.png" alt="LocalAIHub Logo" width="64" height="64" />
+</p>
+
+<p align="center">
+  LocalAIHub 管理后台，基于 Next.js App Router 构建。
+</p>
 
 ## 功能特性
 

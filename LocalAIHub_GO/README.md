@@ -1,6 +1,12 @@
 # LocalAIHub_GO
 
-LocalAIHub Go 后端服务，提供 AI 网关和后台管理 API。
+<p align="center">
+  <img src="../logo.png" alt="LocalAIHub Logo" width="64" height="64" />
+</p>
+
+<p align="center">
+  LocalAIHub Go 后端服务，提供 AI 网关和后台管理 API。
+</p>
 
 ## 功能特性
 

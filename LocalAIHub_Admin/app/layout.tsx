@@ -3,8 +3,11 @@ import type { ReactNode } from 'react'
 import { ToastProvider } from '@/components/ui/toast'
 
 export const metadata = {
-  title: 'AI Gateway - 管理后台',
+  title: 'LocalAIHub - 管理后台',
   description: '本地 AI 中转网关管理后台',
+  icons: {
+    icon: '/logo.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
