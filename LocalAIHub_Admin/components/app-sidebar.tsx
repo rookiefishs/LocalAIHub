@@ -6,7 +6,7 @@ import { FiLayers, FiChevronLeft, FiChevronRight, FiHelpCircle } from 'react-ico
 import { HiOutlineKey, HiOutlineBookOpen } from 'react-icons/hi2'
 import { LuLogs } from 'react-icons/lu'
 import { MdOutlineRoute, MdOutlineSpaceDashboard } from 'react-icons/md'
-import { TbPlugConnected, TbTopologyStarRing3 } from 'react-icons/tb'
+import { TbPlugConnected } from 'react-icons/tb'
 
 const mainNavItems = [
   { title: '仪表盘', href: '/dashboard', icon: MdOutlineSpaceDashboard },
@@ -34,12 +34,10 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
       <div className="flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out" style={{ width: collapsed ? 64 : 220 }}>
         <div className="flex items-center justify-between p-3" style={{ borderBottom: '1px solid var(--sidebar-border)' }}>
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'rgba(56, 201, 212, 0.15)', border: '1px solid rgba(56, 201, 212, 0.25)' }}>
-              <TbTopologyStarRing3 className="h-4 w-4" style={{ color: 'var(--primary)' }} />
-            </div>
+            <img src="/logo.png" alt="Logo" className="h-8 w-8 rounded-lg" />
             {!collapsed && (
               <div>
-                <h2 className="text-sm font-medium leading-tight" style={{ color: 'var(--sidebar-foreground)' }}>AI Gateway</h2>
+                <h2 className="text-sm font-medium leading-tight" style={{ color: 'var(--sidebar-foreground)' }}>LocalAIHub</h2>
                 <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>管理后台</p>
               </div>
             )}
