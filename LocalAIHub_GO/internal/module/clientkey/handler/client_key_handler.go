@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"localaihub/localaihub_go/internal/module/clientkey/service"
@@ -120,4 +121,35 @@ func (h *ClientKeyHandler) Delete(w http.ResponseWriter, r *http.Request, id int
 		return
 	}
 	response.AdminSuccess(w, r, map[string]any{"id": id, "deleted": true})
+}
+
+func (h *ClientKeyHandler) GetQuota(w http.ResponseWriter, r *http.Request, id int64) {
+	item, err := h.service.GetQuotaUsage(r.Context(), id)
+	if err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, "get quota failed")
+		return
+	}
+	if item == nil {
+		response.AdminError(w, r, http.StatusNotFound, 404100, "client key not found")
+		return
+	}
+	response.AdminSuccess(w, r, item)
+}
+
+func (h *ClientKeyHandler) UpdateQuota(w http.ResponseWriter, r *http.Request, id int64) {
+	var req struct {
+		DailyRequestLimit   *int64 `json:"daily_request_limit"`
+		MonthlyRequestLimit *int64 `json:"monthly_request_limit"`
+		DailyTokenLimit     *int64 `json:"daily_token_limit"`
+		MonthlyTokenLimit   *int64 `json:"monthly_token_limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid parameters")
+		return
+	}
+	if err := h.service.UpdateQuota(r.Context(), id, req.DailyRequestLimit, req.MonthlyRequestLimit, req.DailyTokenLimit, req.MonthlyTokenLimit); err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, "update quota failed")
+		return
+	}
+	response.AdminSuccess(w, r, map[string]any{"id": id, "updated": true})
 }

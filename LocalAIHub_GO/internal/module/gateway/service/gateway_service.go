@@ -101,8 +101,46 @@ func (s *GatewayService) AuthenticateClient(ctx context.Context, authHeader stri
 	if client.ExpiresAt != nil && client.ExpiresAt.Before(time.Now().UTC()) {
 		return nil, fmt.Errorf("client key expired")
 	}
+	if client.QuotaDisabledAt != nil {
+		return nil, fmt.Errorf("api key disabled due to quota exceeded")
+	}
+	if err := s.checkAndEnforceQuota(ctx, client); err != nil {
+		return nil, err
+	}
 	_ = s.repo.TouchClientLastUsed(ctx, client.ID)
 	return client, nil
+}
+
+func (s *GatewayService) checkAndEnforceQuota(ctx context.Context, client *repository.GatewayClient) error {
+	exceeded := false
+	reason := ""
+
+	if client.DailyRequestLimit != nil && client.CurrentDailyRequests >= *client.DailyRequestLimit {
+		exceeded = true
+		reason = "daily request limit exceeded"
+	} else if client.MonthlyRequestLimit != nil && client.CurrentMonthlyRequests >= *client.MonthlyRequestLimit {
+		exceeded = true
+		reason = "monthly request limit exceeded"
+	} else if client.DailyTokenLimit != nil && client.CurrentDailyTokens >= *client.DailyTokenLimit {
+		exceeded = true
+		reason = "daily token limit exceeded"
+	} else if client.MonthlyTokenLimit != nil && client.CurrentMonthlyTokens >= *client.MonthlyTokenLimit {
+		exceeded = true
+		reason = "monthly token limit exceeded"
+	}
+
+	if exceeded {
+		logger.Log.Warn().Int64("client_id", client.ID).Str("reason", reason).Msg("quota exceeded, disabling client")
+		if err := s.repo.DisableClient(ctx, client.ID); err != nil {
+			logger.Log.Error().Err(err).Msg("failed to disable client due to quota exceeded")
+		}
+		return fmt.Errorf("quota exceeded: %s", reason)
+	}
+	return nil
+}
+
+func (s *GatewayService) IncrementClientUsage(ctx context.Context, clientID int64, tokens int) error {
+	return s.repo.IncrementClientUsage(ctx, clientID, tokens)
 }
 
 func (s *GatewayService) ListOpenAIModels(ctx context.Context) ([]map[string]any, error) {
@@ -598,6 +636,19 @@ func (s *GatewayService) ForwardAnthropicMessages(ctx context.Context, client *r
 
 	_ = s.providerKeyService.ReportResult(ctx, providerKey.ID, true, "")
 	_ = s.routeService.RegisterSuccess(ctx, route.ProviderID, route.VirtualModelID)
+
+	if client != nil && resp.StatusCode < 400 {
+		if usage, ok := mapped["usage"].(map[string]any); ok {
+			if tt, ok := usage["tokens"].(map[string]any); ok {
+				if total, ok := tt["total"].(float64); ok && total > 0 {
+					if err := s.repo.IncrementClientUsage(ctx, client.ID, int(total)); err != nil {
+						logger.Log.Error().Err(err).Msg("failed to increment client usage")
+					}
+				}
+			}
+		}
+	}
+
 	return mapped, resp.StatusCode, nil
 }
 
@@ -830,6 +881,11 @@ func (s *GatewayService) logGatewayRequest(ctx context.Context, client *reposito
 	}); err != nil {
 		logger.Log.Error().Err(err).Msg("failed to insert request log")
 	}
+	if client != nil && success && totalTokens != nil && *totalTokens > 0 {
+		if err := s.repo.IncrementClientUsage(ctx, client.ID, *totalTokens); err != nil {
+			logger.Log.Error().Err(err).Msg("failed to increment client usage")
+		}
+	}
 }
 
 func (s *GatewayService) logProxyRequest(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, method, path string, rawBody []byte, statusCode int, success bool, respBody []byte, errorCode, errorMessage *string) {
@@ -900,6 +956,11 @@ func (s *GatewayService) logProxyRequest(ctx context.Context, client *repository
 		ErrorMessage:        errorMessage,
 	}); err != nil {
 		logger.Log.Error().Err(err).Msg("failed to insert request log")
+	}
+	if client != nil && success && totalTokens != nil && *totalTokens > 0 {
+		if err := s.repo.IncrementClientUsage(ctx, client.ID, *totalTokens); err != nil {
+			logger.Log.Error().Err(err).Msg("failed to increment client usage")
+		}
 	}
 }
 

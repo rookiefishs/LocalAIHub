@@ -10,20 +10,30 @@ import (
 )
 
 type ClientKey struct {
-	ID            int64      `json:"id"`
-	Name          string     `json:"name"`
-	KeyPrefix     string     `json:"key_prefix"`
-	APIKeyHash    string     `json:"-"`
-	PlainKey      string     `json:"plain_key,omitempty"`
-	Status        string     `json:"status"`
-	Remark        *string    `json:"remark,omitempty"`
-	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
-	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
-	AllowedModels []int64    `json:"allowed_models,omitempty"`
-	RequestCount  int        `json:"request_count,omitempty"`
-	TotalTokens   int        `json:"total_tokens,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID                     int64      `json:"id"`
+	Name                   string     `json:"name"`
+	KeyPrefix              string     `json:"key_prefix"`
+	APIKeyHash             string     `json:"-"`
+	PlainKey               string     `json:"plain_key,omitempty"`
+	Status                 string     `json:"status"`
+	Remark                 *string    `json:"remark,omitempty"`
+	LastUsedAt             *time.Time `json:"last_used_at,omitempty"`
+	ExpiresAt              *time.Time `json:"expires_at,omitempty"`
+	AllowedModels          []int64    `json:"allowed_models,omitempty"`
+	RequestCount           int        `json:"request_count,omitempty"`
+	TotalTokens            int        `json:"total_tokens,omitempty"`
+	DailyRequestLimit      *int64     `json:"daily_request_limit,omitempty"`
+	MonthlyRequestLimit    *int64     `json:"monthly_request_limit,omitempty"`
+	DailyTokenLimit        *int64     `json:"daily_token_limit,omitempty"`
+	MonthlyTokenLimit      *int64     `json:"monthly_token_limit,omitempty"`
+	CurrentDailyRequests   int64      `json:"current_daily_requests"`
+	CurrentMonthlyRequests int64      `json:"current_monthly_requests"`
+	CurrentDailyTokens     int64      `json:"current_daily_tokens"`
+	CurrentMonthlyTokens   int64      `json:"current_monthly_tokens"`
+	QuotaResetAt           *string    `json:"quota_reset_at,omitempty"`
+	QuotaDisabledAt        *time.Time `json:"quota_disabled_at,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 type ClientKeyRepository struct{ db *sql.DB }
@@ -36,7 +46,7 @@ func (r *ClientKeyRepository) List(ctx context.Context, page, pageSize int) ([]C
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
-	rows, err := r.db.QueryContext(ctx, `SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark, last_used_at, expires_at, created_at, updated_at FROM api_client ORDER BY id DESC LIMIT ? OFFSET ?`, pageSize, offset)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark, last_used_at, expires_at, daily_request_limit, monthly_request_limit, daily_token_limit, monthly_token_limit, current_daily_requests, current_monthly_requests, current_daily_tokens, current_monthly_tokens, quota_reset_at, quota_disabled_at, created_at, updated_at FROM api_client ORDER BY id DESC LIMIT ? OFFSET ?`, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -44,9 +54,9 @@ func (r *ClientKeyRepository) List(ctx context.Context, page, pageSize int) ([]C
 	items := make([]ClientKey, 0)
 	for rows.Next() {
 		var item ClientKey
-		var remark sql.NullString
-		var lastUsed, expires sql.NullTime
-		if err := rows.Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.PlainKey, &item.Status, &remark, &lastUsed, &expires, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		var remark, quotaResetAt sql.NullString
+		var lastUsed, expires, quotaDisabled sql.NullTime
+		if err := rows.Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.PlainKey, &item.Status, &remark, &lastUsed, &expires, &item.DailyRequestLimit, &item.MonthlyRequestLimit, &item.DailyTokenLimit, &item.MonthlyTokenLimit, &item.CurrentDailyRequests, &item.CurrentMonthlyRequests, &item.CurrentDailyTokens, &item.CurrentMonthlyTokens, &quotaResetAt, &quotaDisabled, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
 		if remark.Valid {
@@ -57,6 +67,12 @@ func (r *ClientKeyRepository) List(ctx context.Context, page, pageSize int) ([]C
 		}
 		if expires.Valid {
 			item.ExpiresAt = &expires.Time
+		}
+		if quotaResetAt.Valid {
+			item.QuotaResetAt = &quotaResetAt.String
+		}
+		if quotaDisabled.Valid {
+			item.QuotaDisabledAt = &quotaDisabled.Time
 		}
 		items = append(items, item)
 	}
@@ -207,11 +223,11 @@ func (r *ClientKeyRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *ClientKeyRepository) GetByID(ctx context.Context, id int64) (*ClientKey, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark, last_used_at, expires_at, created_at, updated_at FROM api_client WHERE id = ?`, id)
+	row := r.db.QueryRowContext(ctx, `SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark, last_used_at, expires_at, daily_request_limit, monthly_request_limit, daily_token_limit, monthly_token_limit, current_daily_requests, current_monthly_requests, current_daily_tokens, current_monthly_tokens, quota_reset_at, quota_disabled_at, created_at, updated_at FROM api_client WHERE id = ?`, id)
 	var item ClientKey
-	var remark sql.NullString
-	var lastUsed, expires sql.NullTime
-	if err := row.Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.PlainKey, &item.Status, &remark, &lastUsed, &expires, &item.CreatedAt, &item.UpdatedAt); err != nil {
+	var remark, quotaResetAt sql.NullString
+	var lastUsed, expires, quotaDisabled sql.NullTime
+	if err := row.Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.PlainKey, &item.Status, &remark, &lastUsed, &expires, &item.DailyRequestLimit, &item.MonthlyRequestLimit, &item.DailyTokenLimit, &item.MonthlyTokenLimit, &item.CurrentDailyRequests, &item.CurrentMonthlyRequests, &item.CurrentDailyTokens, &item.CurrentMonthlyTokens, &quotaResetAt, &quotaDisabled, &item.CreatedAt, &item.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -226,6 +242,12 @@ func (r *ClientKeyRepository) GetByID(ctx context.Context, id int64) (*ClientKey
 	if expires.Valid {
 		item.ExpiresAt = &expires.Time
 	}
+	if quotaResetAt.Valid {
+		item.QuotaResetAt = &quotaResetAt.String
+	}
+	if quotaDisabled.Valid {
+		item.QuotaDisabledAt = &quotaDisabled.Time
+	}
 	return &item, nil
 }
 
@@ -237,5 +259,48 @@ func (r *ClientKeyRepository) GetStatus(ctx context.Context, keyID int64) (strin
 
 func (r *ClientKeyRepository) UpdateStatus(ctx context.Context, keyID int64, status string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET status = ?, updated_at = ? WHERE id = ?`, status, time.Now().UTC(), keyID)
+	return err
+}
+
+func (r *ClientKeyRepository) UpdateQuota(ctx context.Context, keyID int64, dailyReq, monthlyReq, dailyToken, monthlyToken *int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET daily_request_limit = ?, monthly_request_limit = ?, daily_token_limit = ?, monthly_token_limit = ?, updated_at = ? WHERE id = ?`,
+		dailyReq, monthlyReq, dailyToken, monthlyToken, time.Now().UTC(), keyID)
+	return err
+}
+
+func (r *ClientKeyRepository) IncrementUsage(ctx context.Context, keyID int64, tokens int) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET current_daily_requests = current_daily_requests + 1, current_monthly_requests = current_monthly_requests + 1, current_daily_tokens = current_daily_tokens + ?, current_monthly_tokens = current_monthly_tokens + ?, updated_at = ? WHERE id = ?`,
+		tokens, tokens, time.Now().UTC(), keyID)
+	return err
+}
+
+func (r *ClientKeyRepository) GetQuotaUsage(ctx context.Context, keyID int64) (*ClientKey, error) {
+	var item ClientKey
+	var remark, quotaResetAt sql.NullString
+	var lastUsed, expires, quotaDisabled sql.NullTime
+	err := r.db.QueryRowContext(ctx, `SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark, last_used_at, expires_at, daily_request_limit, monthly_request_limit, daily_token_limit, monthly_token_limit, current_daily_requests, current_monthly_requests, current_daily_tokens, current_monthly_tokens, quota_reset_at, quota_disabled_at, created_at, updated_at FROM api_client WHERE id = ?`, keyID).Scan(
+		&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.PlainKey, &item.Status, &remark, &lastUsed, &expires, &item.DailyRequestLimit, &item.MonthlyRequestLimit, &item.DailyTokenLimit, &item.MonthlyTokenLimit, &item.CurrentDailyRequests, &item.CurrentMonthlyRequests, &item.CurrentDailyTokens, &item.CurrentMonthlyTokens, &quotaResetAt, &quotaDisabled, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if remark.Valid {
+		item.Remark = &remark.String
+	}
+	if quotaResetAt.Valid {
+		item.QuotaResetAt = &quotaResetAt.String
+	}
+	if quotaDisabled.Valid {
+		item.QuotaDisabledAt = &quotaDisabled.Time
+	}
+	return &item, nil
+}
+
+func (r *ClientKeyRepository) ResetDailyQuota(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET current_daily_requests = 0, current_daily_tokens = 0, quota_reset_at = CURDATE() WHERE status = 'active'`)
+	return err
+}
+
+func (r *ClientKeyRepository) ResetMonthlyQuota(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET current_monthly_requests = 0, current_monthly_tokens = 0 WHERE status = 'active'`)
 	return err
 }

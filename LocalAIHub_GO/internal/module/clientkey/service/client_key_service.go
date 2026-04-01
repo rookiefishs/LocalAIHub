@@ -239,3 +239,21 @@ func (s *ClientKeyService) Delete(ctx context.Context, id int64, ip, userAgent s
 	}
 	return err
 }
+
+func (s *ClientKeyService) GetQuotaUsage(ctx context.Context, id int64) (*repository.ClientKey, error) {
+	return s.repo.GetQuotaUsage(ctx, id)
+}
+
+func (s *ClientKeyService) UpdateQuota(ctx context.Context, id int64, dailyReq, monthlyReq, dailyToken, monthlyToken *int64) error {
+	err := s.repo.UpdateQuota(ctx, id, dailyReq, monthlyReq, dailyToken, monthlyToken)
+	if err == nil && s.audit != nil {
+		targetID := id
+		s.audit.Log(ctx, "client_key.update_quota", "api_client", &targetID, map[string]any{
+			"daily_request_limit":   dailyReq,
+			"monthly_request_limit": monthlyReq,
+			"daily_token_limit":     dailyToken,
+			"monthly_token_limit":   monthlyToken,
+		}, "", "")
+	}
+	return err
+}

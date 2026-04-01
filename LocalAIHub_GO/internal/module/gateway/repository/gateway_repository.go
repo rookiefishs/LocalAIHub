@@ -13,12 +13,21 @@ import (
 var Log = logger.Log
 
 type GatewayClient struct {
-	ID         int64
-	Name       string
-	KeyPrefix  string
-	APIKeyHash string
-	Status     string
-	ExpiresAt  *time.Time
+	ID                     int64
+	Name                   string
+	KeyPrefix              string
+	APIKeyHash             string
+	Status                 string
+	ExpiresAt              *time.Time
+	DailyRequestLimit      *int64
+	MonthlyRequestLimit    *int64
+	DailyTokenLimit        *int64
+	MonthlyTokenLimit      *int64
+	CurrentDailyRequests   int64
+	CurrentMonthlyRequests int64
+	CurrentDailyTokens     int64
+	CurrentMonthlyTokens   int64
+	QuotaDisabledAt        *time.Time
 }
 
 type ModelRoute struct {
@@ -262,8 +271,8 @@ func (r *GatewayRepository) CountDebugSessions24h(ctx context.Context) (int64, e
 
 func (r *GatewayRepository) GetClientByHash(ctx context.Context, hash string) (*GatewayClient, error) {
 	var item GatewayClient
-	var expiresAt sql.NullTime
-	err := r.db.QueryRowContext(ctx, `SELECT id, name, key_prefix, api_key_hash, status, expires_at FROM api_client WHERE api_key_hash = ? LIMIT 1`, hash).Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.Status, &expiresAt)
+	var expiresAt, quotaDisabledAt sql.NullTime
+	err := r.db.QueryRowContext(ctx, `SELECT id, name, key_prefix, api_key_hash, status, expires_at, daily_request_limit, monthly_request_limit, daily_token_limit, monthly_token_limit, current_daily_requests, current_monthly_requests, current_daily_tokens, current_monthly_tokens, quota_disabled_at FROM api_client WHERE api_key_hash = ? LIMIT 1`, hash).Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.Status, &expiresAt, &item.DailyRequestLimit, &item.MonthlyRequestLimit, &item.DailyTokenLimit, &item.MonthlyTokenLimit, &item.CurrentDailyRequests, &item.CurrentMonthlyRequests, &item.CurrentDailyTokens, &item.CurrentMonthlyTokens, &quotaDisabledAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -272,6 +281,9 @@ func (r *GatewayRepository) GetClientByHash(ctx context.Context, hash string) (*
 	}
 	if expiresAt.Valid {
 		item.ExpiresAt = &expiresAt.Time
+	}
+	if quotaDisabledAt.Valid {
+		item.QuotaDisabledAt = &quotaDisabledAt.Time
 	}
 	return &item, nil
 }
@@ -294,6 +306,17 @@ func (r *GatewayRepository) ClientCanAccessModel(ctx context.Context, clientID, 
 
 func (r *GatewayRepository) TouchClientLastUsed(ctx context.Context, clientID int64) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET last_used_at = ?, updated_at = ? WHERE id = ?`, time.Now().UTC(), time.Now().UTC(), clientID)
+	return err
+}
+
+func (r *GatewayRepository) IncrementClientUsage(ctx context.Context, clientID int64, tokens int) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET current_daily_requests = current_daily_requests + 1, current_monthly_requests = current_monthly_requests + 1, current_daily_tokens = current_daily_tokens + ?, current_monthly_tokens = current_monthly_tokens + ?, updated_at = ? WHERE id = ?`,
+		tokens, tokens, time.Now().UTC(), clientID)
+	return err
+}
+
+func (r *GatewayRepository) DisableClient(ctx context.Context, clientID int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET status = 'disabled', quota_disabled_at = ?, updated_at = ? WHERE id = ?`, time.Now().UTC(), time.Now().UTC(), clientID)
 	return err
 }
 

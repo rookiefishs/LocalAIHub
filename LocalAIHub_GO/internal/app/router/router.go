@@ -273,6 +273,23 @@ func dynamicClientKeyHandler(handler *clientkeyhandler.ClientKeyHandler) http.Ha
 			handler.Test(w, r, id)
 			return
 		}
+		if strings.HasSuffix(path, "/quota") {
+			id, err := strconv.ParseInt(strings.Trim(strings.TrimSuffix(path, "/quota"), "/"), 10, 64)
+			if err != nil {
+				response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid client key id")
+				return
+			}
+			if r.Method == http.MethodGet {
+				handler.GetQuota(w, r, id)
+				return
+			}
+			if r.Method == http.MethodPut {
+				handler.UpdateQuota(w, r, id)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
 		id, err := strconv.ParseInt(strings.Trim(path, "/"), 10, 64)
 		if err != nil {
 			response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid client key id")
