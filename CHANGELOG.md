@@ -23,6 +23,7 @@
 
 ## 2026/04/01
 
+- Fixed: API 测试工具下拉框过滤掉已禁用的 API Key，避免选择后认证失败。
 - Added: API 测试工具页面，支持选择 API Key 和模型发送测试请求，实时显示响应、耗时和 Token 消耗统计。
 - Added: API Key 配额管理功能，支持设置每日/每月请求次数和 Token 限制，配额耗尽后自动禁用 Key。
 - Added: Gateway 请求处理中增加配额检查和 Token 使用统计。
