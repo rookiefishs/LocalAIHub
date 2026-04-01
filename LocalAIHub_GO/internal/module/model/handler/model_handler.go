@@ -127,3 +127,12 @@ func (h *ModelHandler) DeleteBinding(w http.ResponseWriter, r *http.Request, mod
 	}
 	response.AdminSuccess(w, r, map[string]any{"id": bindingID, "deleted": true})
 }
+
+func (h *ModelHandler) TestBinding(w http.ResponseWriter, r *http.Request, modelID, bindingID int64) {
+	result, err := h.service.TestBinding(r.Context(), modelID, bindingID)
+	if err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, err.Error())
+		return
+	}
+	response.AdminSuccess(w, r, result)
+}

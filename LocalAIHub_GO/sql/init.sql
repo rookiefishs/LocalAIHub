@@ -262,6 +262,21 @@ CREATE TABLE IF NOT EXISTS audit_log (
     CONSTRAINT fk_audit_log_admin FOREIGN KEY (admin_user_id) REFERENCES admin_user(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS health_check_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    target_type VARCHAR(32) NOT NULL COMMENT 'provider/provider_key/client_key',
+    target_id BIGINT NOT NULL,
+    target_name VARCHAR(128) NULL COMMENT '名称或标识',
+    check_status VARCHAR(16) NOT NULL COMMENT 'enabled/disabled/active',
+    previous_status VARCHAR(16) NULL,
+    error_message VARCHAR(255) NULL,
+    latency_ms INT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    KEY idx_health_check_log_target (target_type, target_id, created_at),
+    KEY idx_health_check_log_check_time (created_at),
+    KEY idx_health_check_log_target_type (target_type, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS system_config (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     config_group VARCHAR(64) NOT NULL,
@@ -287,7 +302,10 @@ VALUES
     ('circuit_breaker', 'half_open_probe_count', JSON_OBJECT('value', 2), 'Half-open probe count'),
     ('logs', 'request_log_retention_days', JSON_OBJECT('value', 7), 'Request log retention days'),
     ('logs', 'audit_log_retention_days', JSON_OBJECT('value', 30), 'Audit log retention days'),
-    ('logs', 'debug_log_retention_days', JSON_OBJECT('value', 3), 'Debug log retention days');
+    ('logs', 'debug_log_retention_days', JSON_OBJECT('value', 3), 'Debug log retention days'),
+    ('health_check', 'enabled', JSON_OBJECT('value', true), '是否启用健康检查'),
+    ('health_check', 'interval_minutes', JSON_OBJECT('value', 60), '健康检查间隔（分钟）'),
+    ('health_check', 'retention_days', JSON_OBJECT('value', 30), '健康检查日志保留天数');
 
 INSERT IGNORE INTO virtual_model (model_code, display_name, protocol_family, capability_flags, visible, status, sort_order, description, default_params_json)
 VALUES

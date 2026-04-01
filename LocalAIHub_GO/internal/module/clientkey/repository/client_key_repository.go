@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,6 +20,8 @@ type ClientKey struct {
 	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 	AllowedModels []int64    `json:"allowed_models,omitempty"`
+	RequestCount  int        `json:"request_count,omitempty"`
+	TotalTokens   int        `json:"total_tokens,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
@@ -56,6 +60,37 @@ func (r *ClientKeyRepository) List(ctx context.Context, page, pageSize int) ([]C
 		}
 		items = append(items, item)
 	}
+
+	if len(items) > 0 {
+		idStr := make([]string, len(items))
+		for i, it := range items {
+			idStr[i] = strconv.FormatInt(it.ID, 10)
+		}
+		idsComma := strings.Join(idStr, ",")
+		statsRows, err := r.db.QueryContext(ctx, fmt.Sprintf(`SELECT client_id, COUNT(*) as request_count, COALESCE(SUM(total_tokens), 0) as total_tokens FROM request_log WHERE client_id IN (%s) GROUP BY client_id`, idsComma))
+		if err == nil {
+			defer statsRows.Close()
+			statsMap := make(map[int64]struct {
+				RequestCount int
+				TotalTokens  int
+			})
+			for statsRows.Next() {
+				var cid, rc, tt int64
+				statsRows.Scan(&cid, &rc, &tt)
+				statsMap[cid] = struct {
+					RequestCount int
+					TotalTokens  int
+				}{RequestCount: int(rc), TotalTokens: int(tt)}
+			}
+			for i := range items {
+				if st, ok := statsMap[items[i].ID]; ok {
+					items[i].RequestCount = st.RequestCount
+					items[i].TotalTokens = st.TotalTokens
+				}
+			}
+		}
+	}
+
 	return items, total, rows.Err()
 }
 
@@ -117,9 +152,32 @@ func (r *ClientKeyRepository) GetAllowedModels(ctx context.Context, clientID int
 	return models, rows.Err()
 }
 
-func (r *ClientKeyRepository) UpdateStatus(ctx context.Context, id int64, status string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET status = ?, updated_at = ? WHERE id = ?`, status, time.Now().UTC(), id)
-	return err
+func (r *ClientKeyRepository) ListActive(ctx context.Context) ([]ClientKey, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark, last_used_at, expires_at, created_at, updated_at FROM api_client WHERE status = 'active'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]ClientKey, 0)
+	for rows.Next() {
+		var item ClientKey
+		var remark sql.NullString
+		var lastUsed, expires sql.NullTime
+		if err := rows.Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.PlainKey, &item.Status, &remark, &lastUsed, &expires, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if remark.Valid {
+			item.Remark = &remark.String
+		}
+		if lastUsed.Valid {
+			item.LastUsedAt = &lastUsed.Time
+		}
+		if expires.Valid {
+			item.ExpiresAt = &expires.Time
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (r *ClientKeyRepository) Update(ctx context.Context, id int64, name, remark string) error {
@@ -145,5 +203,39 @@ func (r *ClientKeyRepository) ReplaceAllowedModels(ctx context.Context, clientID
 
 func (r *ClientKeyRepository) Delete(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM api_client WHERE id = ?`, id)
+	return err
+}
+
+func (r *ClientKeyRepository) GetByID(ctx context.Context, id int64) (*ClientKey, error) {
+	row := r.db.QueryRowContext(ctx, `SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark, last_used_at, expires_at, created_at, updated_at FROM api_client WHERE id = ?`, id)
+	var item ClientKey
+	var remark sql.NullString
+	var lastUsed, expires sql.NullTime
+	if err := row.Scan(&item.ID, &item.Name, &item.KeyPrefix, &item.APIKeyHash, &item.PlainKey, &item.Status, &remark, &lastUsed, &expires, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if remark.Valid {
+		item.Remark = &remark.String
+	}
+	if lastUsed.Valid {
+		item.LastUsedAt = &lastUsed.Time
+	}
+	if expires.Valid {
+		item.ExpiresAt = &expires.Time
+	}
+	return &item, nil
+}
+
+func (r *ClientKeyRepository) GetStatus(ctx context.Context, keyID int64) (string, error) {
+	var status string
+	err := r.db.QueryRowContext(ctx, `SELECT status FROM api_client WHERE id = ?`, keyID).Scan(&status)
+	return status, err
+}
+
+func (r *ClientKeyRepository) UpdateStatus(ctx context.Context, keyID int64, status string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET status = ?, updated_at = ? WHERE id = ?`, status, time.Now().UTC(), keyID)
 	return err
 }

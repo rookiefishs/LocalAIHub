@@ -53,7 +53,7 @@ export function ConfirmDialog({
       onClick={(e) => e.target === e.currentTarget && onCancel()}
     >
       <div
-        className={`relative w-full max-w-lg rounded-xl border p-6 transition-all duration-150 ${show && !opening ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}
+        className={`relative w-full max-w-lg rounded-[10px] border p-6 transition-all duration-150 ${show && !opening ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}
         style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
       >
         <div className="mb-4">

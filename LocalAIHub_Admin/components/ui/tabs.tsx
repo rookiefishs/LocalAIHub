@@ -11,7 +11,7 @@ const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
 >(({ className, ...props }, ref) => (
-  <TabsPrimitive.List ref={ref} className={cn('inline-flex items-center gap-2 rounded-xl border p-1', className)} style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.03)' }} {...props} />
+  <TabsPrimitive.List ref={ref} className={cn('inline-flex items-center gap-2 rounded-[10px] border p-1', className)} style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.03)' }} {...props} />
 ))
 TabsList.displayName = TabsPrimitive.List.displayName
 
@@ -19,7 +19,7 @@ const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
 >(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger ref={ref} className={cn('inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition data-[state=active]:bg-[linear-gradient(135deg,#38c9d4_0%,#2897c8_100%)] data-[state=active]:text-[#081015]', className)} {...props} />
+  <TabsPrimitive.Trigger ref={ref} className={cn('inline-flex items-center justify-center rounded-[10px] px-3 py-2 text-sm font-medium transition data-[state=active]:bg-[linear-gradient(135deg,#38c9d4_0%,#2897c8_100%)] data-[state=active]:text-[#081015]', className)} {...props} />
 ))
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
 

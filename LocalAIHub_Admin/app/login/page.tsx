@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { setToken } from '@/lib/auth'
+import { LogoMark } from '@/components/logo-mark'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -43,7 +44,7 @@ export default function LoginPage() {
       <div className="w-full max-w-[440px]">
         <div className="mb-8 flex flex-col items-start gap-4">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="LocalAIHub" className="h-12 w-12 rounded-xl" />
+            <LogoMark className="h-12 w-12" />
             <div>
               <h1 className="text-xl font-medium" style={{ color: 'var(--foreground)' }}>LocalAIHub</h1>
             </div>

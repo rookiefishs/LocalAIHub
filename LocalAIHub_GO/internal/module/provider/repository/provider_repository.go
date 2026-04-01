@@ -148,3 +148,54 @@ func (r *ProviderRepository) CheckDelete(ctx context.Context, id int64) (*Provid
 	}
 	return &result, nil
 }
+
+func (r *ProviderRepository) ListEnabled(ctx context.Context) ([]Provider, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, name, provider_type, service_type, base_url, auth_type, timeout_ms, enabled, health_status, last_health_check_at, last_health_message, remark, created_at, updated_at FROM provider WHERE enabled = 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Provider, 0)
+	for rows.Next() {
+		var item Provider
+		var lastCheck sql.NullTime
+		var lastMessage, remark sql.NullString
+		if err := rows.Scan(&item.ID, &item.Name, &item.ProviderType, &item.ServiceType, &item.BaseURL, &item.AuthType, &item.TimeoutMS, &item.Enabled, &item.HealthStatus, &lastCheck, &lastMessage, &remark, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if lastCheck.Valid {
+			item.LastHealthCheckAt = &lastCheck.Time
+		}
+		if lastMessage.Valid {
+			item.LastHealthMessage = &lastMessage.String
+		}
+		if remark.Valid {
+			item.Remark = &remark.String
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *ProviderRepository) GetEnabled(ctx context.Context) (bool, error) {
+	var enabled bool
+	err := r.db.QueryRowContext(ctx, `SELECT enabled FROM provider WHERE id = ?`).Scan(&enabled)
+	return enabled, err
+}
+
+func (r *ProviderRepository) ListKeys(ctx context.Context, providerID int64) ([]ProviderKey, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, provider_id, key_masked, secret_encrypted, status, priority, fail_count, last_used_at, last_error_at, last_error_message, remark, created_at, updated_at FROM provider_key WHERE provider_id = ? AND status = 'enabled' ORDER BY priority ASC`, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]ProviderKey, 0)
+	for rows.Next() {
+		item, err := scanProviderKey(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	return items, rows.Err()
+}

@@ -2,14 +2,17 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FiLayers, FiChevronLeft, FiChevronRight, FiHelpCircle } from 'react-icons/fi'
+import { FiLayers, FiChevronLeft, FiChevronRight, FiHelpCircle, FiZap, FiTrendingUp } from 'react-icons/fi'
 import { HiOutlineKey, HiOutlineBookOpen } from 'react-icons/hi2'
 import { LuLogs } from 'react-icons/lu'
 import { MdOutlineRoute, MdOutlineSpaceDashboard } from 'react-icons/md'
 import { TbPlugConnected } from 'react-icons/tb'
+import { LogoMark } from '@/components/logo-mark'
 
 const mainNavItems = [
   { title: '仪表盘', href: '/dashboard', icon: MdOutlineSpaceDashboard },
+  { title: '快捷流程', href: '/dashboard/wizard', icon: FiZap },
+  { title: '统计分析', href: '/dashboard/analytics', icon: FiTrendingUp },
   { title: '上游管理', href: '/dashboard/upstreams', icon: TbPlugConnected },
   { title: '虚拟模型', href: '/dashboard/models', icon: FiLayers },
   { title: '路由管理', href: '/dashboard/routes', icon: MdOutlineRoute },
@@ -34,7 +37,7 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
       <div className="flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out" style={{ width: collapsed ? 64 : 220 }}>
         <div className="flex items-center justify-between p-3" style={{ borderBottom: '1px solid var(--sidebar-border)' }}>
           <Link href="/dashboard" className="flex items-center gap-2">
-            <img src="/logo.png" alt="Logo" className="h-8 w-8 rounded-lg" />
+            <LogoMark className="h-8 w-8" />
             {!collapsed && (
               <div>
                 <h2 className="text-sm font-medium leading-tight" style={{ color: 'var(--sidebar-foreground)' }}>LocalAIHub</h2>
@@ -62,7 +65,7 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all"
+                    className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
                     style={{
                       background: active ? 'rgba(56, 201, 212, 0.14)' : 'transparent',
                       color: active ? '#7de7ef' : 'var(--sidebar-foreground)',
@@ -87,7 +90,7 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all"
+                    className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
                     style={{
                       background: active ? 'rgba(56, 201, 212, 0.14)' : 'transparent',
                       color: active ? '#7de7ef' : 'var(--sidebar-foreground)',

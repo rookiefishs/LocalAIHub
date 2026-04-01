@@ -167,6 +167,26 @@ func (r *ModelRepository) UpdateBinding(ctx context.Context, item *Binding) erro
 	return err
 }
 
+func (r *ModelRepository) GetBinding(ctx context.Context, bindingID int64) (*Binding, error) {
+	var item Binding
+	var providerKeyID sql.NullInt64
+	var remark sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT id, virtual_model_id, provider_id, provider_key_id, upstream_model_name, priority, is_same_name, enabled, capability_snapshot_json, param_override_json, remark, created_at, updated_at FROM virtual_model_binding WHERE id = ?`, bindingID).Scan(&item.ID, &item.VirtualModelID, &item.ProviderID, &providerKeyID, &item.UpstreamModelName, &item.Priority, &item.IsSameName, &item.Enabled, &item.CapabilitySnapshotJSON, &item.ParamOverrideJSON, &remark, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if providerKeyID.Valid {
+		item.ProviderKeyID = &providerKeyID.Int64
+	}
+	if remark.Valid {
+		item.Remark = &remark.String
+	}
+	return &item, nil
+}
+
 func normalizeJSON(raw json.RawMessage, fallback string) string {
 	if len(raw) == 0 {
 		return fallback

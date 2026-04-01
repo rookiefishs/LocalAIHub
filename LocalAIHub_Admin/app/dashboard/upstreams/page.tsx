@@ -49,6 +49,7 @@ export default function UpstreamsPage() {
   const [loadingStatus, setLoadingStatus] = useState<number | null>(null)
   const [loadingSubmit, setLoadingSubmit] = useState(false)
   const [loadingKeySubmit, setLoadingKeySubmit] = useState(false)
+  const [testingProviders, setTestingProviders] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
@@ -97,11 +98,16 @@ export default function UpstreamsPage() {
       } else {
         await api.createProvider(form)
         showSuccess('创建成功')
+        await load()
+        const newProvider = providers.find(p => p.name === form.name && p.base_url === form.base_url)
+        if (newProvider && form.newKey.trim()) {
+          await loadProviderKeys(newProvider.id)
+          setProviderKeyModalOpen(true)
+        }
       }
       setForm(initialProviderForm)
       setEditingProviderId(null)
       setProviderModalOpen(false)
-      await load()
     } catch (err) {
       showError(err instanceof Error ? err.message : '保存失败')
     }
@@ -203,7 +209,7 @@ export default function UpstreamsPage() {
                     <TableCell><span style={{ color: item.enabled ? 'var(--success)' : 'var(--danger)' }}>{item.enabled ? '是' : '否'}</span></TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
-                        <Button variant="secondary" size="sm" loading={loadingTest === item.id} onClick={() => { setLoadingTest(item.id); api.testProvider(item.id).then(() => { showSuccess('检测完成'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingTest(null)) }}>测试</Button>
+                        <Button variant="secondary" size="sm" loading={testingProviders.has(item.id)} onClick={() => { setTestingProviders(prev => new Set(prev).add(item.id)); api.testProvider(item.id).then(() => { showSuccess('检测完成'); return load() }).catch((err) => showError(err.message)).finally(() => setTestingProviders(prev => { const next = new Set(prev); next.delete(item.id); return next })) }}>测试</Button>
                         <Button variant="secondary" size="sm" onClick={() => { loadProviderKeys(item.id).catch((err) => setMessage(err.message)); setProviderKeyModalOpen(true) }}>Keys</Button>
                         <Button variant="secondary" size="sm" onClick={() => startEdit(item)}>编辑</Button>
                         <Button variant="secondary" size="sm" loading={loadingStatus === item.id} onClick={() => { setLoadingStatus(item.id); api.updateProviderStatus(item.id, !item.enabled).then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(null)) }} style={{ color: item.enabled ? 'var(--danger)' : 'var(--success)' }}>{item.enabled ? '禁用' : '启用'}</Button>
@@ -291,7 +297,7 @@ export default function UpstreamsPage() {
                 <Textarea className="flex-1" placeholder="请输入备注" value={keyForm.remark} onChange={(e) => setKeyForm({ ...keyForm, remark: e.target.value })} />
               </div>
             </div>
-            <div className="space-y-2 rounded-2xl border p-4 text-sm" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.03)' }}>
+            <div className="space-y-2 rounded-[10px] border p-4 text-sm" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.03)' }}>
               {providerKeys.length ? providerKeys.map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-3">
                   <div>{item.key_masked}</div>

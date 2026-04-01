@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FiLayers } from 'react-icons/fi'
 import { GoDotFill } from 'react-icons/go'
-import { HiOutlineCubeTransparent } from 'react-icons/hi2'
+import { HiOutlineCubeTransparent, HiOutlineBolt } from 'react-icons/hi2'
 import { PiGitBranchBold } from 'react-icons/pi'
 import { RiAddLine, RiDeleteBinLine, RiEditLine } from 'react-icons/ri'
 import { api } from '@/lib/api'
@@ -68,6 +68,7 @@ export default function ModelsPage() {
   const [bindingForm, setBindingForm] = useState(initialBindingForm)
   const [loadingSubmit, setLoadingSubmit] = useState(false)
   const [loadingBinding, setLoadingBinding] = useState(false)
+  const [testingBindings, setTestingBindings] = useState<Set<number>>(new Set())
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
@@ -367,7 +368,7 @@ export default function ModelsPage() {
                     onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDrop={() => handleDrop(index)}
-                    className={`flex items-center gap-3 rounded-lg border p-3 ${draggedIndex === index ? 'opacity-50' : ''}`}
+                    className={`flex items-center gap-3 rounded-[10px] border p-3 ${draggedIndex === index ? 'opacity-50' : ''}`}
                     style={{ 
                       borderColor: 'var(--border)', 
                       background: isEditing ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
@@ -411,6 +412,20 @@ export default function ModelsPage() {
                           <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{provider?.name || `p${binding.provider_id}`}</div>
                         </div>
                         <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" loading={testingBindings.has(binding.id)} onClick={async () => {
+                            if (!selectedModelId) return
+                            setTestingBindings(prev => new Set(prev).add(binding.id))
+                            try {
+                              const result = await api.testModelBinding(selectedModelId, binding.id)
+                              showSuccess(`测试成功: ${result.model || 'OK'}`)
+                            } catch (err) {
+                              showError(err instanceof Error ? err.message : '测试失败')
+                            } finally {
+                              setTestingBindings(prev => { const next = new Set(prev); next.delete(binding.id); return next })
+                            }
+                          }}>
+                            <HiOutlineBolt className="h-4 w-4" />
+                          </Button>
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditingBinding(binding)}>
                             <RiEditLine className="h-4 w-4" />
                           </Button>

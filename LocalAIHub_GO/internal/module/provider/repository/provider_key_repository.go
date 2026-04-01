@@ -128,3 +128,26 @@ func scanProviderKey(scanner interface{ Scan(dest ...any) error }) (*ProviderKey
 	}
 	return &item, nil
 }
+
+func (r *ProviderKeyRepository) ListEnabled(ctx context.Context) ([]ProviderKey, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, provider_id, key_masked, secret_encrypted, status, priority, fail_count, last_used_at, last_error_at, last_error_message, remark, created_at, updated_at FROM provider_key WHERE status = 'enabled'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]ProviderKey, 0)
+	for rows.Next() {
+		item, err := scanProviderKey(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	return items, rows.Err()
+}
+
+func (r *ProviderKeyRepository) GetStatus(ctx context.Context, keyID int64) (string, error) {
+	var status string
+	err := r.db.QueryRowContext(ctx, `SELECT status FROM provider_key WHERE id = ?`, keyID).Scan(&status)
+	return status, err
+}

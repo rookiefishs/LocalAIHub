@@ -88,10 +88,13 @@ func (s *GatewayService) AuthenticateClient(ctx context.Context, authHeader stri
 	}
 	hash := sha256.Sum256([]byte(apiKey))
 	hashString := hex.EncodeToString(hash[:])
+	logger.Log.Debug().Str("hash", hashString).Msg("authenticating client")
 	client, err := s.repo.GetClientByHash(ctx, hashString)
 	if err != nil {
+		logger.Log.Error().Err(err).Str("hash", hashString).Msg("failed to get client by hash")
 		return nil, err
 	}
+	logger.Log.Debug().Interface("client", client).Msg("client lookup result")
 	if client == nil || client.Status != "active" {
 		return nil, fmt.Errorf("invalid client key")
 	}

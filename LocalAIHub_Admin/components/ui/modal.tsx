@@ -35,7 +35,7 @@ export function Modal({ open, title, children, onClose, footer }: { open: boolea
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`relative w-full max-w-2xl rounded-xl border p-0 transition-all duration-150 ${show && !opening ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}
+        className={`relative w-full max-w-2xl rounded-[10px] border p-0 transition-all duration-150 ${show && !opening ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}
         style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
       >
         <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--border)' }}>

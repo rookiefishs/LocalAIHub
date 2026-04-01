@@ -12,16 +12,35 @@ import { api } from '@/lib/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 import { useRefresh } from '@/components/refresh-context'
 
+interface ClientKey {
+  id: number
+  name: string
+  key_prefix: string
+  status: string
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState('')
   const [timeRange, setTimeRange] = useState('1d')
+  const [selectedKey, setSelectedKey] = useState<string>('all')
+  const [clientKeys, setClientKeys] = useState<ClientKey[]>([])
   const { registerRefresh } = useRefresh()
+
+  async function loadClientKeys() {
+    try {
+      const res = await api.clientKeys('?page=1&page_size=100')
+      setClientKeys(res.items || [])
+    } catch (err) {
+      console.error('failed to load client keys:', err)
+    }
+  }
 
   async function loadDashboard() {
     try {
       const hours = timeRange === '1d' ? 24 : timeRange === '3d' ? 72 : 168
-      const result = await api.dashboard(`?hours=${hours}`)
+      const query = `?hours=${hours}${selectedKey !== 'all' ? `&client_id=${selectedKey}` : ''}`
+      const result = await api.dashboard(query)
       setData(result)
       setError('')
     } catch (err) {
@@ -30,16 +49,24 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    loadClientKeys()
+  }, [])
+
+  useEffect(() => {
     registerRefresh(loadDashboard)
     loadDashboard()
-  }, [timeRange])
+  }, [timeRange, selectedKey])
 
   useEffect(() => {
     const timer = setInterval(() => {
       loadDashboard()
     }, 30000)
     return () => clearInterval(timer)
-  }, [timeRange])
+  }, [timeRange, selectedKey])
+
+  const selectedKeyName = selectedKey === 'all' 
+    ? '全部' 
+    : clientKeys.find(k => k.id.toString() === selectedKey)?.name || '未知'
 
   const chartData = data?.request_trend?.map((item: any) => ({
     time: item.hour?.slice(11, 16) || '',
@@ -58,7 +85,20 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Select value={selectedKey} onValueChange={setSelectedKey}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="选择 API Key" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部 Key</SelectItem>
+            {clientKeys.map((key) => (
+              <SelectItem key={key.id} value={key.id.toString()}>
+                {key.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger className="w-28">
             <SelectValue />
@@ -72,17 +112,17 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <StatCard title={`请求数 (${timeRangeLabel})`} value={data?.request_count ?? '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} />
-        <StatCard title={`成功率 (${timeRangeLabel})`} value={data ? `${Math.round((data.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} />
-        <StatCard title="平均延迟" value={data?.avg_latency_ms ? `${data.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} />
-        <StatCard title={`Token (${timeRangeLabel})`} value={data?.total_tokens ? `${(data.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} />
-        <StatCard title="上游" value={data?.active_upstream_count ?? '-'} subValue="启用" icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} />
+        <StatCard title={`请求数 (${timeRangeLabel})`} value={data?.request_count ?? '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title={`成功率 (${timeRangeLabel})`} value={data ? `${Math.round((data.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title="平均延迟" value={data?.avg_latency_ms ? `${data.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title={`Token (${timeRangeLabel})`} value={data?.total_tokens ? `${(data.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title="上游" value={data?.active_upstream_count ?? '-'} subValue="启用" icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} href="/dashboard/upstreams" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>请求趋势</CardTitle>
+            <CardTitle>请求趋势 {selectedKey !== 'all' && <span className="text-sm font-normal text-muted-foreground">- {selectedKeyName}</span>}</CardTitle>
           </CardHeader>
           <CardContent>
             {chartData.length > 0 ? (
@@ -109,7 +149,7 @@ export default function DashboardPage() {
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                 暂无趋势数据
               </div>
             )}
@@ -118,7 +158,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Token 趋势</CardTitle>
+            <CardTitle>Token 趋势 {selectedKey !== 'all' && <span className="text-sm font-normal text-muted-foreground">- {selectedKeyName}</span>}</CardTitle>
           </CardHeader>
           <CardContent>
             {chartData.length > 0 ? (
@@ -140,7 +180,7 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                 暂无 Token 数据
               </div>
             )}
@@ -175,7 +215,7 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                 暂无模型数据
               </div>
             )}
@@ -188,19 +228,19 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-6">
-              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(59,130,246,0.05)' }}>
+              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(59,130,246,0.05)' }}>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>总请求</div>
                 <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{data?.request_count ?? 0}</div>
               </div>
-              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(16,185,129,0.05)' }}>
+              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(16,185,129,0.05)' }}>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>成功</div>
                 <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{data?.success_rate ? Math.round(data.request_count * data.success_rate) : 0}</div>
               </div>
-              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(239,68,68,0.05)' }}>
+              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(239,68,68,0.05)' }}>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>失败</div>
                 <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{data?.request_count ? data.request_count - Math.round(data.request_count * (data.success_rate || 0)) : 0}</div>
               </div>
-              <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(139,92,246,0.05)' }}>
+              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(139,92,246,0.05)' }}>
                 <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>平均延迟</div>
                 <div className="text-2xl font-bold mt-1" style={{ color: '#8b5cf6' }}>{data?.avg_latency_ms ?? 0}<span className="text-sm font-normal">ms</span></div>
               </div>
@@ -209,7 +249,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {error ? <div className="rounded-xl border px-4 py-3 text-sm" style={{ borderColor: 'rgba(239,95,114,0.25)', background: 'rgba(239,95,114,0.08)', color: '#ffb4bd' }}>{error}</div> : null}
+      {error ? <div className="rounded-[10px] border px-4 py-3 text-sm" style={{ borderColor: 'rgba(239,95,114,0.25)', background: 'rgba(239,95,114,0.08)', color: '#ffb4bd' }}>{error}</div> : null}
     </div>
   )
 }

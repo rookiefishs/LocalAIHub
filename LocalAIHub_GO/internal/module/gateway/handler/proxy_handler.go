@@ -8,7 +8,6 @@ import (
 
 	gatewayservice "localaihub/localaihub_go/internal/module/gateway/service"
 	"localaihub/localaihub_go/internal/pkg/logger"
-	"localaihub/localaihub_go/internal/pkg/response"
 )
 
 type ProxyHandler struct {
@@ -25,8 +24,10 @@ func (h *ProxyHandler) OpenAIChatCompletions(w http.ResponseWriter, r *http.Requ
 	client, err := h.service.AuthenticateClient(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {
 		logger.Log.Warn().Err(err).Msg("authentication failed")
-		response.JSON(w, http.StatusUnauthorized, map[string]any{
-			"error": map[string]any{"message": "unauthorized", "type": "authentication_error", "code": "GW401001"},
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{"message": err.Error(), "type": "authentication_error", "code": "GW401001"},
 		})
 		return
 	}
@@ -35,7 +36,9 @@ func (h *ProxyHandler) OpenAIChatCompletions(w http.ResponseWriter, r *http.Requ
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
-		response.JSON(w, http.StatusBadRequest, map[string]any{
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
 			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": "GW422001"},
 		})
 		return
@@ -46,8 +49,10 @@ func (h *ProxyHandler) OpenAIChatCompletions(w http.ResponseWriter, r *http.Requ
 func (h *ProxyHandler) OpenAIResponses(w http.ResponseWriter, r *http.Request) {
 	client, err := h.service.AuthenticateClient(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {
-		response.JSON(w, http.StatusUnauthorized, map[string]any{
-			"error": map[string]any{"message": "unauthorized", "type": "authentication_error", "code": "GW401001"},
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{"message": err.Error(), "type": "authentication_error", "code": "GW401001"},
 		})
 		return
 	}
@@ -55,7 +60,9 @@ func (h *ProxyHandler) OpenAIResponses(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
-		response.JSON(w, http.StatusBadRequest, map[string]any{
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
 			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": "GW422001"},
 		})
 		return
@@ -67,8 +74,10 @@ func (h *ProxyHandler) OpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug().Str("method", r.Method).Str("path", r.URL.Path).Msg("request received")
 	client, err := h.service.AuthenticateClient(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {
-		response.JSON(w, http.StatusUnauthorized, map[string]any{
-			"error": map[string]any{"message": "unauthorized", "type": "authentication_error", "code": "GW401001"},
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{"message": err.Error(), "type": "authentication_error", "code": "GW401001"},
 		})
 		return
 	}
@@ -76,7 +85,9 @@ func (h *ProxyHandler) OpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
-		response.JSON(w, http.StatusBadRequest, map[string]any{
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
 			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": "GW422001"},
 		})
 		return
@@ -101,15 +112,19 @@ func writeProxyResponse(w http.ResponseWriter, result *gatewayservice.ProxyHTTPR
 func (h *ProxyHandler) OpenAIModels(w http.ResponseWriter, r *http.Request) {
 	_, err := h.service.AuthenticateClient(r.Context(), r.Header.Get("Authorization"))
 	if err != nil {
-		response.JSON(w, http.StatusUnauthorized, map[string]any{
-			"error": map[string]any{"message": "unauthorized", "type": "authentication_error", "code": "GW401001"},
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{"message": err.Error(), "type": "authentication_error", "code": "GW401001"},
 		})
 		return
 	}
 	items, err := h.service.ListOpenAIModels(r.Context())
 	if err != nil {
-		response.JSON(w, http.StatusInternalServerError, map[string]any{
-			"error": map[string]any{"message": "list models failed", "type": "server_error", "code": "GW500001"},
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{"message": "获取模型列表失败", "type": "server_error", "code": "GW500001"},
 		})
 		return
 	}
@@ -121,7 +136,8 @@ func (h *ProxyHandler) OpenAIModels(w http.ResponseWriter, r *http.Request) {
 			"owned_by": "local-gateway",
 		})
 	}
-	response.JSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
 }
 
 func (h *ProxyHandler) AnthropicMessages(w http.ResponseWriter, r *http.Request) {
@@ -129,8 +145,10 @@ func (h *ProxyHandler) AnthropicMessages(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		client, err = h.service.AuthenticateClient(r.Context(), r.Header.Get("x-api-key"))
 		if err != nil {
-			response.JSON(w, http.StatusUnauthorized, map[string]any{
-				"error": map[string]any{"message": "unauthorized", "type": "authentication_error", "code": "GW401001"},
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{"message": err.Error(), "type": "authentication_error", "code": "GW401001"},
 			})
 			return
 		}
@@ -139,25 +157,31 @@ func (h *ProxyHandler) AnthropicMessages(w http.ResponseWriter, r *http.Request)
 	var req gatewayservice.AnthropicMessagesRequest
 	body, _ := io.ReadAll(r.Body)
 	if err := json.Unmarshal(body, &req); err != nil {
-		response.JSON(w, http.StatusBadRequest, map[string]any{
-			"error": map[string]any{"message": "invalid request body", "type": "invalid_request_error", "code": "GW422001"},
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{"message": "无效的请求体", "type": "invalid_request_error", "code": "GW422001"},
 		})
 		return
 	}
 
 	result, statusCode, err := h.service.ForwardAnthropicMessages(r.Context(), client, req)
 	if err != nil {
-		response.JSON(w, statusCode, map[string]any{
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		json.NewEncoder(w).Encode(map[string]any{
 			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": gatewayErrorCode(statusCode)},
 		})
 		return
 	}
 
-	response.JSON(w, statusCode, result)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
 }
 
 func (h *ProxyHandler) AnthropicModels(w http.ResponseWriter, r *http.Request) {
-	response.JSON(w, http.StatusOK, map[string]any{"data": []map[string]any{}})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{}})
 }
 
 func (h *ProxyHandler) GeminiGeneratePlaceholder(w http.ResponseWriter, r *http.Request) {
@@ -165,13 +189,16 @@ func (h *ProxyHandler) GeminiGeneratePlaceholder(w http.ResponseWriter, r *http.
 		http.NotFound(w, r)
 		return
 	}
-	response.JSON(w, http.StatusNotImplemented, map[string]any{
-		"error": map[string]any{"message": "Gemini generateContent gateway endpoint is scaffolded but not implemented yet", "code": "GW500001"},
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotImplemented)
+	json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{"message": "Gemini 接口暂未实现", "code": "GW500001"},
 	})
 }
 
 func (h *ProxyHandler) GeminiModels(w http.ResponseWriter, r *http.Request) {
-	response.JSON(w, http.StatusOK, map[string]any{"models": []map[string]any{}})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{}})
 }
 
 func gatewayErrorCode(statusCode int) string {

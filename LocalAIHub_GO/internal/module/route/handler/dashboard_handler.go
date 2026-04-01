@@ -28,18 +28,24 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 			hours = parsed
 		}
 	}
+	clientID := int64(0)
+	if v := r.URL.Query().Get("client_id"); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+			clientID = parsed
+		}
+	}
 	openCircuits, _ := h.routeService.CountOpenCircuits(r.Context())
-	requestCount, _ := h.gatewayRepo.CountRequests(r.Context(), hours)
-	successCount, _ := h.gatewayRepo.CountSuccessRequests(r.Context(), hours)
-	avgLatency, _ := h.gatewayRepo.AvgLatency(r.Context(), hours)
+	requestCount, _ := h.gatewayRepo.CountRequests(r.Context(), hours, clientID)
+	successCount, _ := h.gatewayRepo.CountSuccessRequests(r.Context(), hours, clientID)
+	avgLatency, _ := h.gatewayRepo.AvgLatency(r.Context(), hours, clientID)
 	activeUpstreams, _ := h.providerRepo.CountActive(r.Context())
 	debugSessions, _ := h.gatewayRepo.CountDebugSessions24h(r.Context())
-	promptTokens, completionTokens, totalTokens, _ := h.gatewayRepo.SumTokens(r.Context(), hours)
-	trendData, err := h.gatewayRepo.GetRequestTrend(r.Context(), hours)
+	promptTokens, completionTokens, totalTokens, _ := h.gatewayRepo.SumTokens(r.Context(), hours, clientID)
+	trendData, err := h.gatewayRepo.GetRequestTrend(r.Context(), hours, clientID)
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get request trend")
 	}
-	modelDistribution, err := h.gatewayRepo.GetModelDistribution(r.Context(), hours)
+	modelDistribution, err := h.gatewayRepo.GetModelDistribution(r.Context(), hours, clientID)
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get model distribution")
 	}

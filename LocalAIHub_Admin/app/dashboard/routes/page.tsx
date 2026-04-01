@@ -194,7 +194,7 @@ export default function RoutesPage() {
             ) : routes.map((item) => {
               const statusColor = item.manual_locked ? 'text-blue-400' : item.route_status === 'normal' ? 'text-emerald-400' : 'text-yellow-400'
               return (
-                <div key={item.virtual_model_id} className="rounded-xl border p-4 cursor-pointer hover:border-[var(--accent)] transition-colors" style={{ borderColor: 'var(--border)' }} onClick={() => openDetail(item)}>
+                <div key={item.virtual_model_id} className="rounded-[10px] border p-4 cursor-pointer hover:border-[var(--accent)] transition-colors" style={{ borderColor: 'var(--border)' }} onClick={() => openDetail(item)}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <GoDotFill className={`h-3 w-3 ${statusColor}`} />

@@ -1,7 +1,7 @@
 <!--
  * @Author: rookiefish <3209605851@qq.com>
  * @Date: 2026-03-30
- * @LastEditTime: 2026-03-31 23:59:00
+ * @LastEditTime: 2026-04-01
  * @LastEditors: rookiefish <3209605851@qq.com>
  * @Description: LocalAIHub 项目更新日志
 -->
@@ -20,6 +20,19 @@
 - Docs: 文档更新
 - Refactor: 代码重构
 - Reverted: 回滚操作
+
+## 2026/04/01
+
+- Added: 仪表盘新增 API Key 筛选功能，请求趋势和 Token 趋势图表支持按不同 API Key 筛选，默认显示全部 Key 的汇总数据，图表标题显示当前选中的 Key 名称。
+- Added: 新增高级统计分析页面，包含成本统计（按供应商/模型）、Token 消耗趋势、同比环比对比、供应商费用占比饼图、模型费用排行等功能。
+- Added: 新增统计分析侧边栏菜单入口，后端实现相应的 analytics API。
+- Added: 生成待实现功能需求文档，包括高级统计分析、告警通知系统、API Key 配额管理、操作审计日志、配置导入导出、API 测试工具。
+- Changed: 统一前端所有表单控件圆角为 10px（与卡片一致），包括 Button、Input、Textarea、Select、Dialog、AlertDialog、ConfirmDialog、Modal、Tabs 等组件。
+- Changed: Select 下拉菜单增加悬停样式（data-[highlighted]）和选中样式（data-[state=checked]），提升交互体验。
+- Changed: 仪表盘 StatCard 增加点击跳转功能和悬停动画效果（scale + shadow），5 个统计卡片分别跳转到日志或上游管理页面。
+- Changed: 快捷流程页面的步进指示器模块放入卡片中并居中显示，容器最大宽度调整为 max-w-5xl。
+- Fixed: 修复 Go 后端重复导入包的编译错误（healthcheck service）。
+- Fixed: 删除 gateway_repository.go 中重复声明的方法（CountSuccessRequests、AvgLatency、SumTokens 带参数版本冲突）。
 
 ## 2026/03/31
 

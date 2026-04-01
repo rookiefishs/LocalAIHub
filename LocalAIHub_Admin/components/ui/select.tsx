@@ -15,7 +15,7 @@ const SelectTrigger = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
-    className={cn('flex h-11 w-full items-center justify-between rounded-xl border px-4 py-3 text-sm', className)}
+    className={cn('flex h-11 w-full items-center justify-between rounded-[10px] border px-4 py-3 text-sm', className)}
     style={{ borderColor: 'var(--border)', background: 'var(--input)', color: 'var(--foreground)' }}
     {...props}
   >
@@ -34,7 +34,7 @@ const SelectContent = React.forwardRef<
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
-      className={cn('relative z-50 min-w-[8rem] overflow-hidden rounded-xl border shadow-md', className)}
+      className={cn('relative z-50 min-w-[8rem] overflow-hidden rounded-[10px] border shadow-md', className)}
       style={{ borderColor: 'var(--border)', background: 'var(--popover)', color: 'var(--popover-foreground)' }}
       position={position}
       {...props}
@@ -49,10 +49,19 @@ const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
 >(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item ref={ref} className={cn('relative flex w-full cursor-default select-none items-center rounded-lg py-2 pl-8 pr-3 text-sm outline-none hover:bg-white/6', className)} {...props}>
-    <span className="absolute left-2.5 flex h-3.5 w-3.5 items-center justify-center">
+  <SelectPrimitive.Item 
+    ref={ref} 
+    className={cn(
+      'relative flex w-full cursor-default select-none items-center rounded-[8px] py-2.5 pl-9 pr-3 text-sm outline-none transition-all mx-1',
+      'data-[highlighted]:bg-[var(--primary)]/10 data-[highlighted]:text-[var(--primary)]',
+      'data-[state=checked]:bg-[var(--primary)]/15 data-[state=checked]:text-[var(--primary)] data-[state=checked]:font-medium',
+      className
+    )} 
+    {...props}
+  >
+    <span className="absolute left-3 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
+        <Check className="h-4 w-4 text-[var(--primary)]" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

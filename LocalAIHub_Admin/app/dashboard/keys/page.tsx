@@ -33,6 +33,7 @@ export default function KeysPage() {
   const [loadingStatus, setLoadingStatus] = useState<number | null>(null)
   const [loadingTest, setLoadingTest] = useState<number | null>(null)
   const [loadingSubmit, setLoadingSubmit] = useState(false)
+  const [testingKeys, setTestingKeys] = useState<Set<number>>(new Set())
   const [useKeyModalOpen, setUseKeyModalOpen] = useState(false)
   const [selectedKeyForUse, setSelectedKeyForUse] = useState<any | null>(null)
   const [models, setModels] = useState<any[]>([])
@@ -102,9 +103,22 @@ export default function KeysPage() {
     }
   }
 
-  async function testClientKey(id: number) {
-    const result = await api.testClientKey(id)
-    showSuccess(`测试成功：${result.model}`)
+  async function testClientKey(id: number, currentStatus: string) {
+    try {
+      const result = await api.testClientKey(id)
+      showSuccess(`测试成功：${result.model}`)
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '测试失败')
+      if (currentStatus === 'active') {
+        try {
+          await api.updateClientKeyStatus(id, 'disabled')
+          showSuccess('测试失败，已自动禁用')
+          await load()
+        } catch (updateErr) {
+          console.error('自动禁用失败', updateErr)
+        }
+      }
+    }
   }
 
   function openCreateModal() {
@@ -189,6 +203,8 @@ export default function KeysPage() {
               <TableRow>
                 <TableHead>名称</TableHead>
                 <TableHead>API Key</TableHead>
+                <TableHead>请求次数</TableHead>
+                <TableHead>Token 消耗</TableHead>
                 <TableHead>备注</TableHead>
                 <TableHead>到期时间</TableHead>
                 <TableHead>最后使用</TableHead>
@@ -199,7 +215,7 @@ export default function KeysPage() {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>暂无数据</TableCell>
+                  <TableCell colSpan={9} className="h-32 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>暂无数据</TableCell>
                 </TableRow>
               ) : items.map((item) => (
                 <TableRow key={item.id}>
@@ -226,6 +242,8 @@ export default function KeysPage() {
                       </Button>
                     </div>
                   </TableCell>
+                  <TableCell className="text-sm" style={{ color: 'var(--foreground)' }}>{item.request_count || 0}</TableCell>
+                  <TableCell className="text-sm" style={{ color: 'var(--foreground)' }}>{(item.total_tokens || 0).toLocaleString()}</TableCell>
                   <TableCell className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{item.remark || '-'}</TableCell>
                   <TableCell className="text-sm" style={{ color: item.expires_at && new Date(item.expires_at) < new Date() ? 'var(--danger)' : 'var(--muted-foreground)' }}>
                     {item.expires_at ? new Date(item.expires_at).toLocaleDateString() : '永久'}
@@ -234,7 +252,7 @@ export default function KeysPage() {
                   <TableCell><span style={{ color: item.status === 'active' ? 'var(--success)' : 'var(--danger)' }}>{item.status === 'active' ? '启用' : '禁用'}</span></TableCell>
                     <TableCell>
                     <div className="flex gap-2">
-                      <Button variant="secondary" size="sm" loading={loadingTest === item.id} onClick={() => { setLoadingTest(item.id); testClientKey(item.id).catch((err) => showError(err.message)).finally(() => setLoadingTest(null)) }}>测试</Button>
+                      <Button variant="secondary" size="sm" loading={testingKeys.has(item.id)} onClick={() => { setTestingKeys(prev => new Set(prev).add(item.id)); testClientKey(item.id, item.status).finally(() => setTestingKeys(prev => { const next = new Set(prev); next.delete(item.id); return next })) }}>测试</Button>
                       <Button variant="secondary" size="sm" onClick={async () => { const keyData = await api.getClientKey(item.id); setSelectedKeyForUse(keyData); setUseKeyModalOpen(true) }}>使用密钥</Button>
                       <Button variant="secondary" size="sm" onClick={() => openEditModal(item)}>编辑</Button>
                       <Button variant="secondary" size="sm" loading={loadingStatus === item.id} onClick={() => { setLoadingStatus(item.id); api.updateClientKeyStatus(item.id, item.status === 'active' ? 'disabled' : 'active').then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(null)) }} style={{ color: item.status === 'active' ? 'var(--danger)' : 'var(--success)' }}>{item.status === 'active' ? '禁用' : '启用'}</Button>
@@ -350,14 +368,14 @@ export default function KeysPage() {
               <div>
                 <div className="text-sm mb-1" style={{ color: 'var(--muted-foreground)' }}>配置内容</div>
                 <div className="relative">
-                  <pre className="p-3 rounded-xl border overflow-auto max-h-60 text-sm font-mono" style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{configText}</pre>
+                  <pre className="p-3 rounded-[10px] border overflow-auto max-h-60 text-sm font-mono" style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{configText}</pre>
                   <Button variant="secondary" size="sm" className="absolute top-2 right-2" onClick={() => { navigator.clipboard.writeText(configText); showSuccess('已复制') }}>复制</Button>
                 </div>
               </div>
               <div>
                 <div className="text-sm mb-1" style={{ color: 'var(--muted-foreground)' }}>Windows CMD 示例</div>
                 <div className="relative">
-                  <pre className="p-3 rounded-xl border overflow-auto max-h-60 text-sm font-mono whitespace-pre-wrap break-all" style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{curlText}</pre>
+                  <pre className="p-3 rounded-[10px] border overflow-auto max-h-60 text-sm font-mono whitespace-pre-wrap break-all" style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{curlText}</pre>
                   <Button variant="secondary" size="sm" className="absolute top-2 right-2" onClick={() => { navigator.clipboard.writeText(curlText); showSuccess('已复制命令') }}>复制命令</Button>
                 </div>
               </div>

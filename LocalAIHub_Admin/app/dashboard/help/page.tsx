@@ -84,7 +84,7 @@ export default function HelpPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10">
+        <div className="p-2 rounded-[10px] bg-primary/10">
           <FiBookOpen className="h-5 w-5 text-primary" />
         </div>
         <div>
@@ -99,7 +99,7 @@ export default function HelpPage() {
             <Card className="h-full cursor-pointer hover:border-primary/50 transition-colors">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
-                  <div className={`p-2 rounded-lg bg-primary/10 ${step.color}`}>
+                  <div className={`p-2 rounded-[10px] bg-primary/10 ${step.color}`}>
                     <step.icon className="h-5 w-5" />
                   </div>
                   <span className="text-xs font-mono" style={{ color: 'var(--muted-foreground)' }}>{String(i + 1).padStart(2, '0')}</span>
@@ -120,7 +120,7 @@ export default function HelpPage() {
           <CardContent className="space-y-4">
             <div>
               <div className="text-sm font-medium mb-2">cURL</div>
-              <pre className="p-3 rounded-lg border overflow-x-auto text-xs font-mono leading-relaxed" style={{ background: 'rgba(0,0,0,0.15)', borderColor: 'var(--border)' }}>
+              <pre className="p-3 rounded-[10px] border overflow-x-auto text-xs font-mono leading-relaxed" style={{ background: 'rgba(0,0,0,0.15)', borderColor: 'var(--border)' }}>
 {`curl -X POST your-domain/proxy/openai/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -129,7 +129,7 @@ export default function HelpPage() {
             </div>
             <div>
               <div className="text-sm font-medium mb-2">Python</div>
-              <pre className="p-3 rounded-lg border overflow-x-auto text-xs font-mono leading-relaxed" style={{ background: 'rgba(0,0,0,0.15)', borderColor: 'var(--border)' }}>
+              <pre className="p-3 rounded-[10px] border overflow-x-auto text-xs font-mono leading-relaxed" style={{ background: 'rgba(0,0,0,0.15)', borderColor: 'var(--border)' }}>
 {`import requests
 r = requests.post("your-domain/proxy/openai/v1/chat/completions",
   headers={"Authorization": "Bearer YOUR_API_KEY"},
