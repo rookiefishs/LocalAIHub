@@ -171,22 +171,18 @@ export default function RoutesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="grid w-full gap-4 md:grid-cols-4">
-          <StatCard title="总数" value={stats.total} icon={<PiGitBranchBold className="h-4 w-4" />} />
-          <StatCard title="正常" value={stats.normal} icon={<GoDotFill className="h-4 w-4 text-emerald-400" />} />
-          <StatCard title="锁定" value={stats.locked} icon={<GoDotFill className="h-4 w-4 text-blue-400" />} />
-          <StatCard title="异常" value={stats.error} icon={<GoDotFill className="h-4 w-4 text-yellow-400" />} />
+      <div className="grid w-full gap-4 md:grid-cols-4">
+        <StatCard title="总数" value={stats.total} icon={<PiGitBranchBold className="h-4 w-4" />} />
+        <StatCard title="正常" value={stats.normal} icon={<GoDotFill className="h-4 w-4 text-emerald-400" />} />
+        <StatCard title="锁定" value={stats.locked} icon={<GoDotFill className="h-4 w-4 text-blue-400" />} />
+        <StatCard title="异常" value={stats.error} icon={<GoDotFill className="h-4 w-4 text-yellow-400" />} />
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--border)' }}>
+          <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>路由列表</div>
+          <Button onClick={() => setRouteModalOpen(true)} size="sm" title="添加路由"><RiAddLine className="h-4 w-4" /></Button>
         </div>
-      </div>
-
-      <div className="flex justify-end">
-        <Button onClick={() => setRouteModalOpen(true)}>
-          <RiAddLine className="mr-1 h-4 w-4" /> 添加路由
-        </Button>
-      </div>
-
-      <Card>
         <CardContent className="p-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {routes.length === 0 ? (

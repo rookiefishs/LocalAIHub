@@ -12,7 +12,6 @@ import { useRefresh } from './refresh-context'
 const pageTitles: Record<string, string> = {
   '/dashboard': '仪表盘',
   '/dashboard/wizard': '快捷流程',
-  '/dashboard/analytics': '统计分析',
   '/dashboard/upstreams': '上游管理',
   '/dashboard/models': '虚拟模型管理',
   '/dashboard/routes': '路由管理',

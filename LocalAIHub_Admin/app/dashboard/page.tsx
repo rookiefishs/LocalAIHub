@@ -116,7 +116,7 @@ export default function DashboardPage() {
         <StatCard title={`成功率 (${timeRangeLabel})`} value={data ? `${Math.round((data.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
         <StatCard title="平均延迟" value={data?.avg_latency_ms ? `${data.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
         <StatCard title={`Token (${timeRangeLabel})`} value={data?.total_tokens ? `${(data.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title="上游" value={data?.active_upstream_count ?? '-'} subValue="启用" icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} href="/dashboard/upstreams" />
+        <StatCard title={`上游 (${timeRangeLabel})`} value={data?.active_upstream_count ?? '-'} subValue={data?.active_upstream_count ? "启用" : undefined} icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} href="/dashboard/upstreams" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

@@ -69,11 +69,4 @@ export const api = {
   requestLogs: (query = '') => apiRequest<any>(`/admin/api/v1/logs/requests${query ? `?${query}` : ''}`),
   requestLogDetail: (id: number) => apiRequest<any>(`/admin/api/v1/logs/requests/${id}`),
   auditLogs: (query = '') => apiRequest<any>(`/admin/api/v1/logs/audit${query ? `?${query}` : ''}`),
-  analyticsCost: (query = '') => apiRequest<any>(`/admin/api/v1/analytics/cost${query ? `?${query}` : ''}`),
-  analyticsTokens: (query = '') => apiRequest<any>(`/admin/api/v1/analytics/tokens${query ? `?${query}` : ''}`),
-  analyticsComparison: (query = '') => apiRequest<any>(`/admin/api/v1/analytics/comparison${query ? `?${query}` : ''}`),
-  modelPricing: (query = '') => apiRequest<any>(`/admin/api/v1/analytics/model-pricing${query ? `?${query}` : ''}`),
-  createModelPricing: (body: any) => apiRequest<any>('/admin/api/v1/analytics/model-pricing', { method: 'POST', body: JSON.stringify(body) }),
-  updateModelPricing: (id: number, body: any) => apiRequest<any>(`/admin/api/v1/analytics/model-pricing/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteModelPricing: (id: number) => apiRequest<any>(`/admin/api/v1/analytics/model-pricing/${id}`, { method: 'DELETE' }),
 }

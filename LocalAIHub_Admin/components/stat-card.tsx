@@ -10,8 +10,10 @@ export function StatCard({ title, value, subValue, hint, icon, href }: { title: 
         {icon}
       </CardHeader>
       <CardContent className="p-5 pt-0">
-        <div className="text-3xl font-semibold">{value}</div>
-        {subValue ? <div className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>{subValue}</div> : null}
+        <div className="text-3xl font-semibold">
+          {value}
+          {subValue && <span className="ml-1 text-lg font-normal" style={{ color: 'var(--muted-foreground)' }}>{subValue}</span>}
+        </div>
         {hint ? <div className="mt-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>{hint}</div> : null}
       </CardContent>
     </>
@@ -19,7 +21,7 @@ export function StatCard({ title, value, subValue, hint, icon, href }: { title: 
 
   if (href) {
     return (
-      <Link href={href} className="block transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg cursor-pointer">
+      <Link href={href} className="block transition-all duration-200 hover:-translate-y-1 cursor-pointer">
         <Card className="cursor-pointer transition-all duration-200 hover:border-[var(--primary)]/50">
           {content}
         </Card>
@@ -28,7 +30,7 @@ export function StatCard({ title, value, subValue, hint, icon, href }: { title: 
   }
 
   return (
-    <Card className="transition-all duration-200 hover:border-[var(--primary)]/30 hover:shadow-md">
+    <Card className="transition-all duration-200 hover:border-[var(--primary)]/30 hover:-translate-y-1">
       {content}
     </Card>
   )

@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FiServer, FiKey, FiBox, FiActivity, FiBookOpen, FiArrowRight, FiCheckCircle } from 'react-icons/fi'
+import { FiServer, FiKey, FiBox, FiActivity, FiArrowRight, FiCheckCircle } from 'react-icons/fi'
 import Link from 'next/link'
 
 const steps = [
@@ -83,16 +83,6 @@ print(response.json())`
 export default function HelpPage() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-[10px] bg-primary/10">
-          <FiBookOpen className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold">使用教程</h1>
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>快速上手 LocalAIHub</p>
-        </div>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {steps.map((step, i) => (
           <Link key={i} href={step.href}>

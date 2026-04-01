@@ -297,11 +297,6 @@ export default function WizardPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold" style={{ color: 'var(--foreground)' }}>快捷流程</h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--muted-foreground)' }}>通过简单几步快速配置完整 AI 接入</p>
-      </div>
-
       <Card className="mb-6">
         <CardContent className="p-6">
           <div className="flex items-center justify-center gap-2">
@@ -311,8 +306,8 @@ export default function WizardPage() {
                   <div
                     className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium transition-colors"
                     style={{
-                      background: index < currentStep ? 'var(--success)' : index === currentStep ? 'var(--primary)' : 'var(--muted)',
-                      color: index <= currentStep ? 'white' : 'var(--muted-foreground)',
+                      background: index < currentStep ? 'var(--success)' : index === currentStep ? 'var(--foreground)' : 'var(--muted)',
+                      color: index <= currentStep ? (index === currentStep ? 'var(--background)' : 'white') : 'var(--muted-foreground)',
                     }}
                   >
                     {index < currentStep ? <FiCheck className="h-4 w-4" /> : index + 1}

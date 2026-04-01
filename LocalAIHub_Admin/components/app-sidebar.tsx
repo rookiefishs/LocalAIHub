@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FiLayers, FiChevronLeft, FiChevronRight, FiHelpCircle, FiZap, FiTrendingUp } from 'react-icons/fi'
+import { FiLayers, FiChevronLeft, FiChevronRight, FiHelpCircle, FiZap } from 'react-icons/fi'
 import { HiOutlineKey, HiOutlineBookOpen } from 'react-icons/hi2'
 import { LuLogs } from 'react-icons/lu'
 import { MdOutlineRoute, MdOutlineSpaceDashboard } from 'react-icons/md'
@@ -12,7 +12,6 @@ import { LogoMark } from '@/components/logo-mark'
 const mainNavItems = [
   { title: '仪表盘', href: '/dashboard', icon: MdOutlineSpaceDashboard },
   { title: '快捷流程', href: '/dashboard/wizard', icon: FiZap },
-  { title: '统计分析', href: '/dashboard/analytics', icon: FiTrendingUp },
   { title: '上游管理', href: '/dashboard/upstreams', icon: TbPlugConnected },
   { title: '虚拟模型', href: '/dashboard/models', icon: FiLayers },
   { title: '路由管理', href: '/dashboard/routes', icon: MdOutlineRoute },
@@ -67,8 +66,8 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
                     href={item.href}
                     className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
                     style={{
-                      background: active ? 'rgba(56, 201, 212, 0.14)' : 'transparent',
-                      color: active ? '#7de7ef' : 'var(--sidebar-foreground)',
+                      background: active ? 'var(--foreground)' : 'transparent',
+                      color: active ? 'var(--background)' : 'var(--sidebar-foreground)',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                     }}
                   >
@@ -92,8 +91,8 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
                     href={item.href}
                     className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
                     style={{
-                      background: active ? 'rgba(56, 201, 212, 0.14)' : 'transparent',
-                      color: active ? '#7de7ef' : 'var(--sidebar-foreground)',
+                      background: active ? 'var(--foreground)' : 'transparent',
+                      color: active ? 'var(--background)' : 'var(--sidebar-foreground)',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                     }}
                   >

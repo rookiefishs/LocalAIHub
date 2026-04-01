@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	analyticshandler "localaihub/localaihub_go/internal/module/analytics/handler"
 	adminauth "localaihub/localaihub_go/internal/module/auth/handler"
 	authservice "localaihub/localaihub_go/internal/module/auth/service"
 	clientkeyhandler "localaihub/localaihub_go/internal/module/clientkey/handler"
@@ -32,7 +31,6 @@ type Handlers struct {
 	ClientKey   *clientkeyhandler.ClientKeyHandler
 	Route       *routehandler.RouteHandler
 	Logs        *loghandler.LogHandler
-	Analytics   *analyticshandler.AnalyticsHandler
 }
 
 func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins []string) http.Handler {
@@ -48,13 +46,6 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 	mux.HandleFunc("POST /admin/api/v1/auth/login", handlers.Auth.Login)
 	mux.Handle("GET /admin/api/v1/auth/me", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Auth.Me)))
 	mux.Handle("GET /admin/api/v1/dashboard/overview", adminAuthMiddleware(authService, http.HandlerFunc(handlers.System.DashboardOverview)))
-	mux.Handle("GET /admin/api/v1/analytics/cost", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Analytics.GetCostStats)))
-	mux.Handle("GET /admin/api/v1/analytics/tokens", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Analytics.GetTokenStats)))
-	mux.Handle("GET /admin/api/v1/analytics/comparison", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Analytics.GetComparison)))
-	mux.Handle("GET /admin/api/v1/analytics/model-pricing", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Analytics.ListModelPricing)))
-	mux.Handle("POST /admin/api/v1/analytics/model-pricing", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Analytics.CreateModelPricing)))
-	mux.Handle("PUT /admin/api/v1/analytics/model-pricing/{id}", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Analytics.UpdateModelPricing)))
-	mux.Handle("DELETE /admin/api/v1/analytics/model-pricing/{id}", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Analytics.DeleteModelPricing)))
 	mux.Handle("GET /admin/api/v1/providers", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Providers.List)))
 	mux.Handle("POST /admin/api/v1/providers", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Providers.Create)))
 	mux.Handle("GET /admin/api/v1/models", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Models.List)))
