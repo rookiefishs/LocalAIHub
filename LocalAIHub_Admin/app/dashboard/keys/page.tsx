@@ -30,7 +30,7 @@ export default function KeysPage() {
   const [form, setForm] = useState(defaultForm)
   const [showKeyId, setShowKeyId] = useState<number | null>(null)
   const [fullKeyMap, setFullKeyMap] = useState<Record<number, string>>({})
-  const [loadingStatus, setLoadingStatus] = useState<number | null>(null)
+  const [loadingStatus, setLoadingStatus] = useState<Set<number>>(new Set())
   const [loadingTest, setLoadingTest] = useState<number | null>(null)
   const [loadingSubmit, setLoadingSubmit] = useState(false)
   const [testingKeys, setTestingKeys] = useState<Set<number>>(new Set())
@@ -255,7 +255,7 @@ export default function KeysPage() {
                       <Button variant="secondary" size="sm" loading={testingKeys.has(item.id)} onClick={() => { setTestingKeys(prev => new Set(prev).add(item.id)); testClientKey(item.id, item.status).finally(() => setTestingKeys(prev => { const next = new Set(prev); next.delete(item.id); return next })) }}>测试</Button>
                       <Button variant="secondary" size="sm" onClick={async () => { const keyData = await api.getClientKey(item.id); setSelectedKeyForUse(keyData); setUseKeyModalOpen(true) }}>使用密钥</Button>
                       <Button variant="secondary" size="sm" onClick={() => openEditModal(item)}>编辑</Button>
-                      <Button variant="secondary" size="sm" loading={loadingStatus === item.id} onClick={() => { setLoadingStatus(item.id); api.updateClientKeyStatus(item.id, item.status === 'active' ? 'disabled' : 'active').then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(null)) }} style={{ color: item.status === 'active' ? 'var(--danger)' : 'var(--success)' }}>{item.status === 'active' ? '禁用' : '启用'}</Button>
+                      <Button variant="secondary" size="sm" loading={loadingStatus.has(item.id)} onClick={() => { setLoadingStatus(prev => new Set(prev).add(item.id)); api.updateClientKeyStatus(item.id, item.status === 'active' ? 'disabled' : 'active').then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(prev => { const next = new Set(prev); next.delete(item.id); return next })) }} style={{ color: item.status === 'active' ? 'var(--danger)' : 'var(--success)' }}>{item.status === 'active' ? '禁用' : '启用'}</Button>
                       <Button variant="destructive" size="sm" onClick={() => setPendingDeleteKey(item)}>删除</Button>
                     </div>
                   </TableCell>
