@@ -23,10 +23,16 @@
 
 ## 2026/04/01
 
+- Changed: 侧边栏选中项改为黑底白字样式（自动适配亮色/暗色主题）。
+- Changed: 快捷流程步进指示器当前步骤改为黑底白字样式（自动适配亮色/暗色主题）。
+- Changed: 仪表盘 StatCard 悬停效果改为向上移动而非放大，移除阴影效果。
+- Changed: 仪表盘上游统计卡片将启用状态显示在数字后面（如 "3 启用"）。
+- Changed: 路由管理页面添加按钮改为仅显示图标，并移至卡片 header 右侧，与虚拟模型列表样式保持一致。
+- Changed: 移除「使用教程」页面的标题和介绍区域。
+- Removed: 移除「快捷流程」页面的标题和介绍区域。
 - Added: 仪表盘新增 API Key 筛选功能，请求趋势和 Token 趋势图表支持按不同 API Key 筛选，默认显示全部 Key 的汇总数据，图表标题显示当前选中的 Key 名称。
-- Changed: 统一前端所有表单控件圆角为 10px（与卡片一致），包括 Button、Input、Textarea、Select、Dialog、AlertDialog、ConfirmDialog、Modal、Tabs 等组件。
 - Changed: Select 下拉菜单增加悬停样式（data-[highlighted]）和选中样式（data-[state=checked]），提升交互体验。
-- Changed: 仪表盘 StatCard 增加点击跳转功能和悬停动画效果（scale + shadow），5 个统计卡片分别跳转到日志或上游管理页面。
+- Changed: 仪表盘 StatCard 增加点击跳转功能和悬停动画效果，5 个统计卡片分别跳转到日志或上游管理页面。
 - Changed: 快捷流程页面的步进指示器模块放入卡片中并居中显示，容器最大宽度调整为 max-w-5xl。
 - Removed: 移除统计分析模块，删除前端 analytics 页面、侧边栏入口、后端 analytics handler 及相关 API（与仪表盘功能重复）。
 - Fixed: 修复 Go 后端重复导入包的编译错误（healthcheck service）。
