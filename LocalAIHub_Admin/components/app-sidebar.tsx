@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FiLayers, FiChevronLeft, FiChevronRight, FiHelpCircle, FiZap } from 'react-icons/fi'
+import { FiLayers, FiChevronLeft, FiChevronRight, FiHelpCircle, FiZap, FiTool } from 'react-icons/fi'
 import { HiOutlineKey, HiOutlineBookOpen } from 'react-icons/hi2'
 import { LuLogs } from 'react-icons/lu'
 import { MdOutlineRoute, MdOutlineSpaceDashboard } from 'react-icons/md'
@@ -21,6 +21,7 @@ const mainNavItems = [
 const systemNavItems = [
   { title: '日志中心', href: '/dashboard/logs', icon: LuLogs },
   { title: '使用教程', href: '/dashboard/help', icon: HiOutlineBookOpen },
+  { title: 'API 测试', href: '/dashboard/test', icon: FiTool },
 ]
 
 interface AppSidebarProps {
