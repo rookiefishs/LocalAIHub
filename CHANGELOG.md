@@ -23,6 +23,9 @@
 
 ## 2026/04/01
 
+- Added: API Key 配额管理功能，支持设置每日/每月请求次数和 Token 限制，配额耗尽后自动禁用 Key。
+- Added: Gateway 请求处理中增加配额检查和 Token 使用统计。
+- Added: 前端 API Key 列表页面新增「配额」按钮，可查看和编辑配额设置。
 - Changed: Select 下拉菜单悬停和选中项改为黑底白字样式（自动适配亮色/暗色主题）。
 - Fixed: 修复 API Key 页面多个 key 启用/禁用按钮共享 loading 状态的问题，现在每个 key 独立控制 loading。
 - Changed: 侧边栏选中项改为黑底白字样式（自动适配亮色/暗色主题）。
