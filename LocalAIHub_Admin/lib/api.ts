@@ -69,6 +69,8 @@ export const api = {
   getClientKeyQuota: (id: number) => apiRequest<any>(`/admin/api/v1/client-keys/${id}/quota`),
   updateClientKeyQuota: (id: number, body: any) => apiRequest<any>(`/admin/api/v1/client-keys/${id}/quota`, { method: 'PUT', body: JSON.stringify(body) }),
   testRequest: (body: any) => apiRequest<any>('/admin/api/v1/tools/test-request', { method: 'POST', body: JSON.stringify(body) }),
+  exportConfig: () => apiRequest<any>('/admin/api/v1/config/export'),
+  importConfig: (body: any) => apiRequest<any>('/admin/api/v1/config/import', { method: 'POST', body: JSON.stringify(body) }),
   requestLogs: (query = '') => apiRequest<any>(`/admin/api/v1/logs/requests${query ? `?${query}` : ''}`),
   requestLogDetail: (id: number) => apiRequest<any>(`/admin/api/v1/logs/requests/${id}`),
   auditLogs: (query = '') => apiRequest<any>(`/admin/api/v1/logs/audit${query ? `?${query}` : ''}`),
