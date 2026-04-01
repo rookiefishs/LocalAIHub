@@ -42,6 +42,10 @@ export default function KeysPage() {
   const [total, setTotal] = useState(0)
   const { showSuccess, showError } = useToast()
   const { registerRefresh } = useRefresh()
+  const [quotaModalOpen, setQuotaModalOpen] = useState(false)
+  const [quotaKey, setQuotaKey] = useState<any | null>(null)
+  const [quotaForm, setQuotaForm] = useState({ daily_request_limit: '', monthly_request_limit: '', daily_token_limit: '', monthly_token_limit: '' })
+  const [loadingQuota, setLoadingQuota] = useState(false)
 
   async function load() {
     const [keysData, modelsData] = await Promise.all([
@@ -164,6 +168,55 @@ export default function KeysPage() {
     setFullKeyMap({})
   }
 
+  async function openQuotaModal(item: any) {
+    setLoadingQuota(true)
+    try {
+      const quotaData = await api.getClientKeyQuota(item.id)
+      setQuotaKey({
+        ...item,
+        daily_request_limit: quotaData.daily_request_limit,
+        monthly_request_limit: quotaData.monthly_request_limit,
+        daily_token_limit: quotaData.daily_token_limit,
+        monthly_token_limit: quotaData.monthly_token_limit,
+        current_daily_requests: quotaData.current_daily_requests,
+        current_monthly_requests: quotaData.current_monthly_requests,
+        current_daily_tokens: quotaData.current_daily_tokens,
+        current_monthly_tokens: quotaData.current_monthly_tokens
+      })
+      setQuotaForm({
+        daily_request_limit: quotaData.daily_request_limit || '',
+        monthly_request_limit: quotaData.monthly_request_limit || '',
+        daily_token_limit: quotaData.daily_token_limit || '',
+        monthly_token_limit: quotaData.monthly_token_limit || ''
+      })
+      setQuotaModalOpen(true)
+    } catch (err) {
+      showError('获取配额信息失败')
+    } finally {
+      setLoadingQuota(false)
+    }
+  }
+
+  async function saveQuota() {
+    if (!quotaKey) return
+    setLoadingQuota(true)
+    try {
+      const body: any = {}
+      if (quotaForm.daily_request_limit) body.daily_request_limit = parseInt(quotaForm.daily_request_limit)
+      if (quotaForm.monthly_request_limit) body.monthly_request_limit = parseInt(quotaForm.monthly_request_limit)
+      if (quotaForm.daily_token_limit) body.daily_token_limit = parseInt(quotaForm.daily_token_limit)
+      if (quotaForm.monthly_token_limit) body.monthly_token_limit = parseInt(quotaForm.monthly_token_limit)
+      await api.updateClientKeyQuota(quotaKey.id, body)
+      showSuccess('配额保存成功')
+      setQuotaModalOpen(false)
+      setQuotaKey(null)
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '保存配额失败')
+    } finally {
+      setLoadingQuota(false)
+    }
+  }
+
   async function copyFullKey(item: any) {
     if (fullKeyMap[item.id]) {
       navigator.clipboard.writeText(fullKeyMap[item.id])
@@ -255,6 +308,7 @@ export default function KeysPage() {
                       <Button variant="secondary" size="sm" loading={testingKeys.has(item.id)} onClick={() => { setTestingKeys(prev => new Set(prev).add(item.id)); testClientKey(item.id, item.status).finally(() => setTestingKeys(prev => { const next = new Set(prev); next.delete(item.id); return next })) }}>测试</Button>
                       <Button variant="secondary" size="sm" onClick={async () => { const keyData = await api.getClientKey(item.id); setSelectedKeyForUse(keyData); setUseKeyModalOpen(true) }}>使用密钥</Button>
                       <Button variant="secondary" size="sm" onClick={() => openEditModal(item)}>编辑</Button>
+                      <Button variant="secondary" size="sm" onClick={() => openQuotaModal(item)}>配额</Button>
                       <Button variant="secondary" size="sm" loading={loadingStatus.has(item.id)} onClick={() => { setLoadingStatus(prev => new Set(prev).add(item.id)); api.updateClientKeyStatus(item.id, item.status === 'active' ? 'disabled' : 'active').then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(prev => { const next = new Set(prev); next.delete(item.id); return next })) }} style={{ color: item.status === 'active' ? 'var(--danger)' : 'var(--success)' }}>{item.status === 'active' ? '禁用' : '启用'}</Button>
                       <Button variant="destructive" size="sm" onClick={() => setPendingDeleteKey(item)}>删除</Button>
                     </div>
@@ -382,6 +436,67 @@ export default function KeysPage() {
             </div>
           )
         })()}
+      </Modal>
+      <Modal
+        open={quotaModalOpen}
+        title="配额设置"
+        onClose={() => { setQuotaModalOpen(false); setQuotaKey(null) }}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => { setQuotaModalOpen(false); setQuotaKey(null) }}>取消</Button>
+            <Button loading={loadingQuota} onClick={saveQuota}>保存</Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <label className="w-28 text-sm" style={{ color: 'var(--foreground)' }}>每日请求限制</label>
+            <Input
+              className="flex-1"
+              type="number"
+              placeholder="不限制"
+              value={quotaForm.daily_request_limit}
+              onChange={(e) => setQuotaForm({ ...quotaForm, daily_request_limit: e.target.value })}
+            />
+            <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>已用: {quotaKey?.current_daily_requests || 0}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <label className="w-28 text-sm" style={{ color: 'var(--foreground)' }}>每月请求限制</label>
+            <Input
+              className="flex-1"
+              type="number"
+              placeholder="不限制"
+              value={quotaForm.monthly_request_limit}
+              onChange={(e) => setQuotaForm({ ...quotaForm, monthly_request_limit: e.target.value })}
+            />
+            <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>已用: {quotaKey?.current_monthly_requests || 0}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <label className="w-28 text-sm" style={{ color: 'var(--foreground)' }}>每日Token限制</label>
+            <Input
+              className="flex-1"
+              type="number"
+              placeholder="不限制"
+              value={quotaForm.daily_token_limit}
+              onChange={(e) => setQuotaForm({ ...quotaForm, daily_token_limit: e.target.value })}
+            />
+            <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>已用: {(quotaKey?.current_daily_tokens || 0).toLocaleString()}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <label className="w-28 text-sm" style={{ color: 'var(--foreground)' }}>每月Token限制</label>
+            <Input
+              className="flex-1"
+              type="number"
+              placeholder="不限制"
+              value={quotaForm.monthly_token_limit}
+              onChange={(e) => setQuotaForm({ ...quotaForm, monthly_token_limit: e.target.value })}
+            />
+            <span className="text-sm" style={{ color: 'var(--muted-foreground)' }}>已用: {(quotaKey?.current_monthly_tokens || 0).toLocaleString()}</span>
+          </div>
+          <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            * 配额耗尽后，API Key 将被自动禁用
+          </div>
+        </div>
       </Modal>
       <ConfirmDialog
         open={Boolean(pendingDeleteKey)}
