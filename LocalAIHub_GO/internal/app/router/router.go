@@ -9,6 +9,7 @@ import (
 	adminauth "localaihub/localaihub_go/internal/module/auth/handler"
 	authservice "localaihub/localaihub_go/internal/module/auth/service"
 	clientkeyhandler "localaihub/localaihub_go/internal/module/clientkey/handler"
+	configexporthandler "localaihub/localaihub_go/internal/module/configexport/handler"
 	gatewayhandler "localaihub/localaihub_go/internal/module/gateway/handler"
 	"localaihub/localaihub_go/internal/module/health/handler"
 	loghandler "localaihub/localaihub_go/internal/module/log/handler"
@@ -33,6 +34,7 @@ type Handlers struct {
 	Route       *routehandler.RouteHandler
 	Logs        *loghandler.LogHandler
 	Tools       *toolshandler.ToolsHandler
+	Config      *configexporthandler.ConfigExportHandler
 }
 
 func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins []string) http.Handler {
@@ -73,6 +75,8 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 	mux.Handle("POST /admin/api/v1/routes/", adminAuthMiddleware(authService, dynamicRouteHandler(handlers)))
 	mux.Handle("DELETE /admin/api/v1/routes/", adminAuthMiddleware(authService, dynamicRouteHandler(handlers)))
 	mux.Handle("POST /admin/api/v1/tools/test-request", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Tools.TestRequest)))
+	mux.Handle("GET /admin/api/v1/config/export", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Config.Export)))
+	mux.Handle("POST /admin/api/v1/config/import", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Config.Import)))
 	mux.HandleFunc("POST /proxy/openai/v1/chat/completions", proxyHandler.OpenAIChatCompletions)
 	mux.HandleFunc("POST /proxy/openai/v1/responses", proxyHandler.OpenAIResponses)
 	mux.HandleFunc("GET /proxy/openai/v1/models", proxyHandler.OpenAIModels)

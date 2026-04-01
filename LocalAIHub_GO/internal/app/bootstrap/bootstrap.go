@@ -20,6 +20,8 @@ import (
 	clientkeyhandler "localaihub/localaihub_go/internal/module/clientkey/handler"
 	clientkeyrepo "localaihub/localaihub_go/internal/module/clientkey/repository"
 	clientkeyservice "localaihub/localaihub_go/internal/module/clientkey/service"
+	configexporthandler "localaihub/localaihub_go/internal/module/configexport/handler"
+	configexportservice "localaihub/localaihub_go/internal/module/configexport/service"
 	gatewayhandler "localaihub/localaihub_go/internal/module/gateway/handler"
 	gatewayrepo "localaihub/localaihub_go/internal/module/gateway/repository"
 	gatewayservice "localaihub/localaihub_go/internal/module/gateway/service"
@@ -100,6 +102,8 @@ func New() (*App, error) {
 	logRepo := logrepo.NewLogRepository(db)
 	logSvc := logservice.NewLogService(gatewayRepo, logRepo)
 
+	configExportSvc := configexportservice.NewExportService(db)
+
 	handlers := router.Handlers{
 		Auth:        authhandler.NewAdminAuthHandler(authSvc),
 		System:      routehandler.NewDashboardHandler(routeSvc, gatewayRepo, providerRepo),
@@ -111,6 +115,7 @@ func New() (*App, error) {
 		Route:       routehandler.NewRouteHandler(routeSvc),
 		Logs:        loghandler.NewLogHandler(logSvc),
 		Tools:       toolshandler.NewToolsHandler(gatewaySvc),
+		Config:      configexporthandler.NewConfigExportHandler(configExportSvc),
 	}
 
 	mux := router.New(handlers, authSvc, cfg.CORS.AllowedOrigins)
