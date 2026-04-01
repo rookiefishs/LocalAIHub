@@ -138,7 +138,7 @@ export default function TestPage() {
                   <SelectValue placeholder="选择 API Key" />
                 </SelectTrigger>
                 <SelectContent>
-                  {keys.map((key) => (
+                  {keys.filter((key) => key.status === 'active').map((key) => (
                     <SelectItem key={key.id} value={key.plain_key || ''}>
                       {key.name} ({key.key_prefix}****)
                     </SelectItem>
