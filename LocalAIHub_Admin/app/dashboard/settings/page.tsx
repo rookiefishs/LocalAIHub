@@ -91,52 +91,43 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <h3 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>导出配置</h3>
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>上游</label>
                   <input
                     type="checkbox"
                     checked={exportModules.providers}
                     onChange={(e) => setExportModules({ ...exportModules, providers: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  上游服务商
-                </label>
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>模型</label>
                   <input
                     type="checkbox"
                     checked={exportModules.virtual_models}
                     onChange={(e) => setExportModules({ ...exportModules, virtual_models: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  虚拟模型
-                </label>
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>绑定</label>
                   <input
                     type="checkbox"
                     checked={exportModules.bindings}
                     onChange={(e) => setExportModules({ ...exportModules, bindings: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  模型绑定
-                </label>
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>Key</label>
                   <input
                     type="checkbox"
                     checked={exportModules.api_clients}
                     onChange={(e) => setExportModules({ ...exportModules, api_clients: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  API Key
-                </label>
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
-                  <input
-                    type="checkbox"
-                    checked={exportModules.provider_keys}
-                    onChange={(e) => setExportModules({ ...exportModules, provider_keys: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                  上游 Key（仅掩码）
-                </label>
+                </div>
               </div>
               <Button onClick={handleExport} loading={exporting}>
                 <LuDownload className="h-4 w-4 mr-1" />
@@ -146,50 +137,45 @@ export default function SettingsPage() {
 
             <div className="space-y-4">
               <h3 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>导入配置</h3>
-              <div>
-                <label className="text-sm mb-2 block" style={{ color: 'var(--foreground)' }}>选择文件</label>
-                <Input
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileChange}
-                  className="cursor-pointer"
-                />
-                {importFile && (
-                  <div className="mt-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                    已选择: {importFile.name}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>文件</label>
+                  <Input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileChange}
+                    className="flex-1"
+                  />
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>覆盖</label>
                   <input
                     type="checkbox"
                     checked={importOptions.overwrite_existing}
                     onChange={(e) => setImportOptions({ ...importOptions, overwrite_existing: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  覆盖已存在配置
-                </label>
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>跳过</label>
                   <input
                     type="checkbox"
                     checked={importOptions.skip_invalid}
                     onChange={(e) => setImportOptions({ ...importOptions, skip_invalid: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  跳过无效记录
-                </label>
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>试运行</label>
                   <input
                     type="checkbox"
                     checked={importOptions.dry_run}
                     onChange={(e) => setImportOptions({ ...importOptions, dry_run: e.target.checked })}
                     className="h-4 w-4"
                   />
-                  试运行（不实际导入）
-                </label>
+                </div>
               </div>
-              <Button onClick={handleImport} loading={importing} disabled={!importFile}>
+              <Button onClick={handleImport} loading={importing}>
                 <LuUpload className="h-4 w-4 mr-1" />
                 导入配置
               </Button>
@@ -197,37 +183,35 @@ export default function SettingsPage() {
           </div>
 
           {importResult && (
-            <Card className="mt-6">
-              <CardContent className="p-4">
-                <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--foreground)' }}>导入结果</h4>
-                {importResult.summary && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                    {Object.entries(importResult.summary).map(([key, value]) => {
-                      if (typeof value === 'number' && value > 0) {
-                        return (
-                          <div key={key} className="flex items-center gap-2 text-sm">
-                            <LuCheck className="h-4 w-4" style={{ color: 'var(--success)' }} />
-                            <span style={{ color: 'var(--muted-foreground)' }}>{key}: </span>
-                            <span style={{ color: 'var(--foreground)' }}>{value}</span>
-                          </div>
-                        )
-                      }
-                      return null
-                    })}
-                  </div>
-                )}
-                {importResult.errors?.length > 0 && (
-                  <div className="space-y-1">
-                    {importResult.errors.map((err: string, i: number) => (
-                      <div key={i} className="flex items-center gap-2 text-sm" style={{ color: 'var(--danger)' }}>
-                        <LuX className="h-4 w-4" />
-                        {err}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <div className="mt-6 p-4 rounded-lg border" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.1)' }}>
+              <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--foreground)' }}>导入结果</h4>
+              {importResult.summary && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  {Object.entries(importResult.summary).map(([key, value]) => {
+                    if (typeof value === 'number' && value > 0) {
+                      return (
+                        <div key={key} className="flex items-center gap-2 text-sm">
+                          <LuCheck className="h-4 w-4" style={{ color: 'var(--success)' }} />
+                          <span style={{ color: 'var(--muted-foreground)' }}>{key}: </span>
+                          <span style={{ color: 'var(--foreground)' }}>{value}</span>
+                        </div>
+                      )
+                    }
+                    return null
+                  })}
+                </div>
+              )}
+              {importResult.errors?.length > 0 && (
+                <div className="space-y-1">
+                  {importResult.errors.map((err: string, i: number) => (
+                    <div key={i} className="flex items-center gap-2 text-sm" style={{ color: 'var(--danger)' }}>
+                      <LuX className="h-4 w-4" />
+                      {err}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
