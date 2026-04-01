@@ -36,6 +36,7 @@ import (
 	routehandler "localaihub/localaihub_go/internal/module/route/handler"
 	routerepo "localaihub/localaihub_go/internal/module/route/repository"
 	routeservice "localaihub/localaihub_go/internal/module/route/service"
+	toolshandler "localaihub/localaihub_go/internal/module/tools/handler"
 )
 
 type App struct {
@@ -109,6 +110,7 @@ func New() (*App, error) {
 		ClientKey:   clientkeyhandler.NewClientKeyHandler(clientKeySvc),
 		Route:       routehandler.NewRouteHandler(routeSvc),
 		Logs:        loghandler.NewLogHandler(logSvc),
+		Tools:       toolshandler.NewToolsHandler(gatewaySvc),
 	}
 
 	mux := router.New(handlers, authSvc, cfg.CORS.AllowedOrigins)

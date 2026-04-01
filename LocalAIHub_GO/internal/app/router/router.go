@@ -15,6 +15,7 @@ import (
 	modelhandler "localaihub/localaihub_go/internal/module/model/handler"
 	providerhandler "localaihub/localaihub_go/internal/module/provider/handler"
 	routehandler "localaihub/localaihub_go/internal/module/route/handler"
+	toolshandler "localaihub/localaihub_go/internal/module/tools/handler"
 	"localaihub/localaihub_go/internal/pkg/appctx"
 	"localaihub/localaihub_go/internal/pkg/cors"
 	"localaihub/localaihub_go/internal/pkg/requestid"
@@ -31,6 +32,7 @@ type Handlers struct {
 	ClientKey   *clientkeyhandler.ClientKeyHandler
 	Route       *routehandler.RouteHandler
 	Logs        *loghandler.LogHandler
+	Tools       *toolshandler.ToolsHandler
 }
 
 func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins []string) http.Handler {
@@ -70,6 +72,7 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 	mux.Handle("GET /admin/api/v1/routes/", adminAuthMiddleware(authService, dynamicRouteHandler(handlers)))
 	mux.Handle("POST /admin/api/v1/routes/", adminAuthMiddleware(authService, dynamicRouteHandler(handlers)))
 	mux.Handle("DELETE /admin/api/v1/routes/", adminAuthMiddleware(authService, dynamicRouteHandler(handlers)))
+	mux.Handle("POST /admin/api/v1/tools/test-request", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Tools.TestRequest)))
 	mux.HandleFunc("POST /proxy/openai/v1/chat/completions", proxyHandler.OpenAIChatCompletions)
 	mux.HandleFunc("POST /proxy/openai/v1/responses", proxyHandler.OpenAIResponses)
 	mux.HandleFunc("GET /proxy/openai/v1/models", proxyHandler.OpenAIModels)
