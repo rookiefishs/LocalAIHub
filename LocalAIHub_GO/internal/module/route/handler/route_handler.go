@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"localaihub/localaihub_go/internal/module/route/service"
@@ -80,6 +81,11 @@ func (h *RouteHandler) Unlock(w http.ResponseWriter, r *http.Request, virtualMod
 
 func (h *RouteHandler) Delete(w http.ResponseWriter, r *http.Request, virtualModelID int64) {
 	if err := h.service.Delete(r.Context(), virtualModelID, netx.ClientIP(r), r.UserAgent()); err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "cannot delete route") {
+			response.AdminError(w, r, http.StatusBadRequest, 500100, "delete route failed: model still has bindings")
+			return
+		}
 		response.AdminError(w, r, http.StatusInternalServerError, 500100, "delete route failed")
 		return
 	}

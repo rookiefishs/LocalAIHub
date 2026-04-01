@@ -103,39 +103,42 @@ func NewGatewayRepository(db *sql.DB) *GatewayRepository { return &GatewayReposi
 
 func (r *GatewayRepository) CountRequests24h(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) CountRequests(ctx context.Context, hours int, clientID int64) (int64, error) {
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
 		var count int64
-		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
+		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
 		return count, err
 	}
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, hours).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) CountSuccessRequests(ctx context.Context, hours int, clientID int64) (int64, error) {
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
 		var count int64
-		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND success = 1 AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
+		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND success = 1 AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
 		return count, err
 	}
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, hours).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) AvgLatency(ctx context.Context, hours int, clientID int64) (int64, error) {
 	var avg sql.NullFloat64
 	var err error
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
-		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE client_id = ? AND latency_ms IS NOT NULL AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, clientID, hours).Scan(&avg)
+		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE client_id = ? AND latency_ms IS NOT NULL AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&avg)
 	} else {
-		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, hours).Scan(&avg)
+		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&avg)
 	}
 	if err != nil {
 		return 0, err
@@ -147,16 +150,17 @@ func (r *GatewayRepository) AvgLatency(ctx context.Context, hours int, clientID 
 }
 
 func (r *GatewayRepository) SumTokens(ctx context.Context, hours int, clientID int64) (prompt, completion, total int64, err error) {
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
-		err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, clientID, hours).Scan(&prompt, &completion, &total)
+		err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&prompt, &completion, &total)
 		return
 	}
-	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`, hours).Scan(&prompt, &completion, &total)
+	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&prompt, &completion, &total)
 	return
 }
 
 func (r *GatewayRepository) SumTokens24h(ctx context.Context) (prompt, completion, total int64, err error) {
-	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)`).Scan(&prompt, &completion, &total)
+	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&prompt, &completion, &total)
 	return
 }
 
@@ -177,9 +181,10 @@ type ModelStat struct {
 
 func (r *GatewayRepository) GetRequestTrend(ctx context.Context, hours int, clientID int64) ([]HourlyStat, error) {
 	args := []any{hours}
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	query := `
 		SELECT 
-			DATE_FORMAT(created_at, '%Y-%m-%d %H:00') as hour,
+			DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:00') as hour,
 			COUNT(*) as total_count,
 			COALESCE(SUM(success), 0) as success_count,
 			COALESCE(AVG(latency_ms), 0) as avg_latency,
@@ -187,13 +192,13 @@ func (r *GatewayRepository) GetRequestTrend(ctx context.Context, hours int, clie
 			COALESCE(SUM(completion_tokens), 0) as completion_tokens,
 			COALESCE(SUM(total_tokens), 0) as total_tokens
 		FROM request_log 
-		WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`
+		WHERE created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)`
 	if clientID > 0 {
 		query += " AND client_id = ?"
 		args = append(args, clientID)
 	}
 	query += `
-		GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:00')
+		GROUP BY DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:00')
 		ORDER BY hour ASC`
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -214,12 +219,13 @@ func (r *GatewayRepository) GetRequestTrend(ctx context.Context, hours int, clie
 
 func (r *GatewayRepository) GetModelDistribution(ctx context.Context, hours int, clientID int64) ([]ModelStat, error) {
 	args := []any{hours}
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	query := `
 		SELECT 
 			COALESCE(virtual_model_code, upstream_model_name, 'unknown') as model_code,
 			COUNT(*) as count
 		FROM request_log 
-		WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? HOUR)`
+		WHERE created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)`
 	if clientID > 0 {
 		query += " AND client_id = ?"
 		args = append(args, clientID)
@@ -247,13 +253,13 @@ func (r *GatewayRepository) GetModelDistribution(ctx context.Context, hours int,
 
 func (r *GatewayRepository) CountSuccessRequests24h(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) AvgLatency24h(ctx context.Context) (int64, error) {
 	var avg sql.NullFloat64
-	err := r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)`).Scan(&avg)
+	err := r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&avg)
 	if err != nil {
 		return 0, err
 	}
@@ -265,7 +271,7 @@ func (r *GatewayRepository) AvgLatency24h(ctx context.Context) (int64, error) {
 
 func (r *GatewayRepository) CountDebugSessions24h(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE is_debug_logged = 1 AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE is_debug_logged = 1 AND created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&count)
 	return count, err
 }
 
@@ -317,6 +323,15 @@ func (r *GatewayRepository) IncrementClientUsage(ctx context.Context, clientID i
 
 func (r *GatewayRepository) DisableClient(ctx context.Context, clientID int64) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET status = 'disabled', quota_disabled_at = ?, updated_at = ? WHERE id = ?`, time.Now().UTC(), time.Now().UTC(), clientID)
+	return err
+}
+
+func (r *GatewayRepository) SetClientStatus(ctx context.Context, clientID int64, status string, clearQuotaDisabled bool) error {
+	if clearQuotaDisabled {
+		_, err := r.db.ExecContext(ctx, `UPDATE api_client SET status = ?, quota_disabled_at = NULL, updated_at = ? WHERE id = ?`, status, time.Now().UTC(), clientID)
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET status = ?, updated_at = ? WHERE id = ?`, status, time.Now().UTC(), clientID)
 	return err
 }
 

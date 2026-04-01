@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	auditservice "localaihub/localaihub_go/internal/module/audit/service"
@@ -55,7 +56,14 @@ func (s *RouteService) IsCircuitOpen(ctx context.Context, providerID, virtualMod
 }
 
 func (s *RouteService) Delete(ctx context.Context, virtualModelID int64, ip, userAgent string) error {
-	err := s.repo.Delete(ctx, virtualModelID)
+	bindingCount, err := s.repo.CountBindings(ctx, virtualModelID)
+	if err != nil {
+		return err
+	}
+	if bindingCount > 0 {
+		return fmt.Errorf("cannot delete route: model still has %d bindings", bindingCount)
+	}
+	err = s.repo.Delete(ctx, virtualModelID)
 	if err == nil && s.audit != nil {
 		targetID := virtualModelID
 		s.audit.Log(ctx, "route.delete", "route_state", &targetID, map[string]any{"virtual_model_id": virtualModelID}, ip, userAgent)

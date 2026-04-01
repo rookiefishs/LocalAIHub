@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"localaihub/localaihub_go/internal/module/model/repository"
 	"localaihub/localaihub_go/internal/module/model/service"
@@ -114,6 +115,11 @@ func (h *ModelHandler) UpdateBinding(w http.ResponseWriter, r *http.Request, mod
 
 func (h *ModelHandler) Delete(w http.ResponseWriter, r *http.Request, id int64) {
 	if err := h.service.Delete(r.Context(), id, netx.ClientIP(r), r.UserAgent()); err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "still referenced by") {
+			response.AdminError(w, r, http.StatusBadRequest, 500100, "delete model failed: model is still referenced by bindings")
+			return
+		}
 		response.AdminError(w, r, http.StatusInternalServerError, 500100, "delete model failed")
 		return
 	}

@@ -127,6 +127,14 @@ func (r *RouteRepository) Delete(ctx context.Context, virtualModelID int64) erro
 	return err
 }
 
+func (r *RouteRepository) CountBindings(ctx context.Context, virtualModelID int64) (int64, error) {
+	var count int64
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM virtual_model_binding WHERE virtual_model_id = ?`, virtualModelID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func scanRouteState(scanner interface{ Scan(dest ...any) error }) (*RouteState, error) {
 	var item RouteState
 	var currentBindingID sql.NullInt64

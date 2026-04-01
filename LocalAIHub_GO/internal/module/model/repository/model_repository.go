@@ -153,6 +153,22 @@ func (r *ModelRepository) Delete(ctx context.Context, id int64) error {
 	return err
 }
 
+type ModelDeleteCheck struct {
+	BindingCount int64 `json:"binding_count"`
+	RouteCount   int64 `json:"route_count"`
+}
+
+func (r *ModelRepository) CheckDelete(ctx context.Context, id int64) (*ModelDeleteCheck, error) {
+	var result ModelDeleteCheck
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM virtual_model_binding WHERE virtual_model_id = ?`, id).Scan(&result.BindingCount); err != nil {
+		return nil, fmt.Errorf("count model bindings: %w", err)
+	}
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM route_state WHERE virtual_model_id = ?`, id).Scan(&result.RouteCount); err != nil {
+		return nil, fmt.Errorf("count model routes: %w", err)
+	}
+	return &result, nil
+}
+
 func (r *ModelRepository) DeleteBinding(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM virtual_model_binding WHERE id = ?`, id)
 	return err

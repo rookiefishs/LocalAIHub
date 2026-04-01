@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"localaihub/localaihub_go/internal/module/provider/repository"
 	"localaihub/localaihub_go/internal/module/provider/service"
@@ -106,6 +107,15 @@ func (h *ProviderHandler) TestConnection(w http.ResponseWriter, r *http.Request,
 
 func (h *ProviderHandler) Delete(w http.ResponseWriter, r *http.Request, id int64) {
 	if err := h.service.Delete(r.Context(), id, netx.ClientIP(r), r.UserAgent()); err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "still referenced by") {
+			response.AdminError(w, r, http.StatusBadRequest, 500100, "delete provider failed: provider is still referenced by bindings")
+			return
+		}
+		if strings.Contains(errMsg, "still has") {
+			response.AdminError(w, r, http.StatusBadRequest, 500100, "delete provider failed: please delete provider keys first")
+			return
+		}
 		response.AdminError(w, r, http.StatusInternalServerError, 500100, "delete provider failed")
 		return
 	}

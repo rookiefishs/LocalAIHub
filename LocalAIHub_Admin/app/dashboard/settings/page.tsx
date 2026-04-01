@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { LuDownload, LuUpload, LuFileJson, LuCheck, LuX } from 'react-icons/lu'
+import { LuDownload, LuUpload, LuCheck, LuX, LuFileJson } from 'react-icons/lu'
 import { FiSettings } from 'react-icons/fi'
 import { api } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/components/ui/toast'
 
 export default function SettingsPage() {
@@ -78,6 +78,10 @@ export default function SettingsPage() {
     }
   }
 
+  function clearFile() {
+    setImportFile(null)
+  }
+
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
@@ -91,43 +95,27 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <h3 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>导出配置</h3>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>上游</label>
-                  <input
-                    type="checkbox"
-                    checked={exportModules.providers}
-                    onChange={(e) => setExportModules({ ...exportModules, providers: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>模型</label>
-                  <input
-                    type="checkbox"
-                    checked={exportModules.virtual_models}
-                    onChange={(e) => setExportModules({ ...exportModules, virtual_models: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>绑定</label>
-                  <input
-                    type="checkbox"
-                    checked={exportModules.bindings}
-                    onChange={(e) => setExportModules({ ...exportModules, bindings: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>Key</label>
-                  <input
-                    type="checkbox"
-                    checked={exportModules.api_clients}
-                    onChange={(e) => setExportModules({ ...exportModules, api_clients: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                </div>
+              <div className="space-y-3">
+                <Switch
+                  checked={exportModules.providers}
+                  onChange={(e) => setExportModules({ ...exportModules, providers: e.target.checked })}
+                  label="上游"
+                />
+                <Switch
+                  checked={exportModules.virtual_models}
+                  onChange={(e) => setExportModules({ ...exportModules, virtual_models: e.target.checked })}
+                  label="模型"
+                />
+                <Switch
+                  checked={exportModules.bindings}
+                  onChange={(e) => setExportModules({ ...exportModules, bindings: e.target.checked })}
+                  label="绑定"
+                />
+                <Switch
+                  checked={exportModules.api_clients}
+                  onChange={(e) => setExportModules({ ...exportModules, api_clients: e.target.checked })}
+                  label="API Key"
+                />
               </div>
               <Button onClick={handleExport} loading={exporting}>
                 <LuDownload className="h-4 w-4 mr-1" />
@@ -138,44 +126,43 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <h3 className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>导入配置</h3>
               <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>文件</label>
-                  <Input
-                    type="file"
-                    accept=".json"
-                    onChange={handleFileChange}
-                    className="flex-1"
-                  />
+                <div>
+                  <label className="text-sm mb-2 block" style={{ color: 'var(--foreground)' }}>配置文件</label>
+                  {!importFile ? (
+                    <label className="flex items-center justify-center h-12 rounded-[10px] border-2 border-dashed cursor-pointer transition-colors hover:bg-[var(--accent)]" style={{ borderColor: 'var(--border)' }}>
+                      <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                        <LuFileJson className="h-4 w-4" />
+                        <span>点击选择 JSON 文件</span>
+                      </div>
+                      <input type="file" accept=".json" onChange={handleFileChange} className="hidden" />
+                    </label>
+                  ) : (
+                    <div className="flex items-center justify-between h-12 rounded-[10px] border px-4" style={{ borderColor: 'var(--border)', background: 'var(--input)' }}>
+                      <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--foreground)' }}>
+                        <LuFileJson className="h-4 w-4" />
+                        <span className="truncate max-w-[200px]">{importFile.name}</span>
+                      </div>
+                      <button onClick={clearFile} className="text-sm hover:opacity-70" style={{ color: 'var(--muted-foreground)' }}>清除</button>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>覆盖</label>
-                  <input
-                    type="checkbox"
-                    checked={importOptions.overwrite_existing}
-                    onChange={(e) => setImportOptions({ ...importOptions, overwrite_existing: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>跳过</label>
-                  <input
-                    type="checkbox"
-                    checked={importOptions.skip_invalid}
-                    onChange={(e) => setImportOptions({ ...importOptions, skip_invalid: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>试运行</label>
-                  <input
-                    type="checkbox"
-                    checked={importOptions.dry_run}
-                    onChange={(e) => setImportOptions({ ...importOptions, dry_run: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                </div>
+                <Switch
+                  checked={importOptions.overwrite_existing}
+                  onChange={(e) => setImportOptions({ ...importOptions, overwrite_existing: e.target.checked })}
+                  label="覆盖已存在"
+                />
+                <Switch
+                  checked={importOptions.skip_invalid}
+                  onChange={(e) => setImportOptions({ ...importOptions, skip_invalid: e.target.checked })}
+                  label="跳过无效项"
+                />
+                <Switch
+                  checked={importOptions.dry_run}
+                  onChange={(e) => setImportOptions({ ...importOptions, dry_run: e.target.checked })}
+                  label="试运行（不实际导入）"
+                />
               </div>
-              <Button onClick={handleImport} loading={importing}>
+              <Button onClick={handleImport} loading={importing} disabled={!importFile}>
                 <LuUpload className="h-4 w-4 mr-1" />
                 导入配置
               </Button>

@@ -8,6 +8,7 @@ import { LuLogs } from 'react-icons/lu'
 import { MdOutlineRoute, MdOutlineSpaceDashboard } from 'react-icons/md'
 import { TbPlugConnected } from 'react-icons/tb'
 import { LogoMark } from '@/components/logo-mark'
+import { useEffect, useState } from 'react'
 
 const mainNavItems = [
   { title: '仪表盘', href: '/dashboard', icon: MdOutlineSpaceDashboard },
@@ -32,6 +33,13 @@ interface AppSidebarProps {
 
 export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
   const pathname = usePathname()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const activePath = (pathname || '').replace(/\/$/, '')
 
   return (
     <aside className="sidebar-shell hidden h-screen lg:block" style={{ width: '100%' }}>
@@ -61,15 +69,17 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
             <div className="space-y-1">
               {mainNavItems.map((item) => {
                 const Icon = item.icon
-                const active = pathname === item.href
+                const isActive = mounted && activePath
+                  ? activePath === item.href || (item.href !== '/dashboard' && activePath.startsWith(item.href))
+                  : false
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
                     style={{
-                      background: active ? 'var(--foreground)' : 'transparent',
-                      color: active ? 'var(--background)' : 'var(--sidebar-foreground)',
+                      background: isActive ? 'var(--foreground)' : 'transparent',
+                      color: isActive ? 'var(--background)' : 'var(--sidebar-foreground)',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                     }}
                   >
@@ -86,15 +96,15 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
             <div className="space-y-1">
               {systemNavItems.map((item) => {
                 const Icon = item.icon
-                const active = pathname === item.href
+                const isActive = mounted && activePath ? activePath === item.href || (item.href !== '/dashboard/logs' && activePath.startsWith(item.href)) : false
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
                     style={{
-                      background: active ? 'var(--foreground)' : 'transparent',
-                      color: active ? 'var(--background)' : 'var(--sidebar-foreground)',
+                      background: isActive ? 'var(--foreground)' : 'transparent',
+                      color: isActive ? 'var(--background)' : 'var(--sidebar-foreground)',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                     }}
                   >

@@ -76,6 +76,9 @@ func (s *ProviderService) Delete(ctx context.Context, id int64, ip, userAgent st
 	if check.BindingCount > 0 {
 		return fmt.Errorf("provider is still referenced by %d bindings", check.BindingCount)
 	}
+	if check.KeyCount > 0 {
+		return fmt.Errorf("provider still has %d keys, please delete keys first", check.KeyCount)
+	}
 	err = s.repo.Delete(ctx, id)
 	if err == nil && s.audit != nil {
 		targetID := id

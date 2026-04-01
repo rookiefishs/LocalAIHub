@@ -334,7 +334,7 @@ func (s *ExportService) exportBindings(ctx context.Context) ([]map[string]interf
 func (s *ExportService) exportApiClients(ctx context.Context) ([]map[string]interface{}, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, key_prefix, api_key_hash, plain_key, status, remark,
-		       last_used_at, expires_at, allowed_models_json,
+		       last_used_at, expires_at,
 		       created_at, updated_at
 		FROM api_client
 	`)
@@ -349,37 +349,24 @@ func (s *ExportService) exportApiClients(ctx context.Context) ([]map[string]inte
 		var name, keyPrefix, apiKeyHash, plainKey, status string
 		var remark sql.NullString
 		var lastUsedAt, expiresAt sql.NullTime
-		var allowedModelsJSON []byte
 		var createdAt, updatedAt time.Time
 
 		if err := rows.Scan(&id, &name, &keyPrefix, &apiKeyHash, &plainKey, &status, &remark,
-			&lastUsedAt, &expiresAt, &allowedModelsJSON, &createdAt, &updatedAt); err != nil {
+			&lastUsedAt, &expiresAt, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 
-		var allowedModels interface{}
-		if len(allowedModelsJSON) > 0 {
-			_ = json.Unmarshal(allowedModelsJSON, &allowedModels)
-		}
-
 		m := map[string]interface{}{
-			"id":         id,
-			"name":       name,
-			"key_prefix": keyPrefix,
-			"plain_key":  plainKey,
-			"status":     status,
-			"remark":     remark.String,
-			"created_at": createdAt,
-			"updated_at": updatedAt,
-		}
-		if lastUsedAt.Valid {
-			m["last_used_at"] = lastUsedAt.Time
-		}
-		if expiresAt.Valid {
-			m["expires_at"] = expiresAt.Time
-		}
-		if allowedModels != nil {
-			m["allowed_models"] = allowedModels
+			"id":           id,
+			"name":         name,
+			"key_prefix":   keyPrefix,
+			"plain_key":    plainKey,
+			"status":       status,
+			"remark":       remark.String,
+			"last_used_at": lastUsedAt.Time.Format(time.RFC3339),
+			"expires_at":   expiresAt.Time.Format(time.RFC3339),
+			"created_at":   createdAt.Format(time.RFC3339),
+			"updated_at":   updatedAt.Format(time.RFC3339),
 		}
 		results = append(results, m)
 	}

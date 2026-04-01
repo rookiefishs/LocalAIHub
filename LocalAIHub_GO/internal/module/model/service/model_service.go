@@ -61,7 +61,14 @@ func (s *ModelService) UpdateBinding(ctx context.Context, item *repository.Bindi
 }
 
 func (s *ModelService) Delete(ctx context.Context, id int64, ip, userAgent string) error {
-	err := s.repo.Delete(ctx, id)
+	check, err := s.repo.CheckDelete(ctx, id)
+	if err != nil {
+		return err
+	}
+	if check.BindingCount > 0 {
+		return fmt.Errorf("model is still referenced by %d bindings", check.BindingCount)
+	}
+	err = s.repo.Delete(ctx, id)
 	if err == nil && s.audit != nil {
 		targetID := id
 		s.audit.Log(ctx, "model.delete", "virtual_model", &targetID, map[string]any{"id": id}, ip, userAgent)
