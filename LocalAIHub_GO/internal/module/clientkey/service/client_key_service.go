@@ -117,8 +117,8 @@ func (s *ClientKeyService) UpdateStatus(ctx context.Context, id int64, status, i
 	return err
 }
 
-func (s *ClientKeyService) Update(ctx context.Context, id int64, name, remark, ip, userAgent string, allowedModels []int64) error {
-	err := s.repo.Update(ctx, id, name, remark)
+func (s *ClientKeyService) Update(ctx context.Context, id int64, name, remark, expiresAt, ip, userAgent string, allowedModels []int64) error {
+	err := s.repo.Update(ctx, id, name, remark, expiresAt)
 	if err != nil {
 		return err
 	}

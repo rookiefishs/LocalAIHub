@@ -88,6 +88,9 @@ export default function TestPage() {
         max_tokens: body.max_tokens
       })
       setResult(data)
+      if (data.key_status) {
+        setKeys((prev) => prev.map((key) => key.plain_key === selectedKey ? { ...key, status: data.key_status } : key))
+      }
       if (data.success) {
         showSuccess(`请求成功，耗时 ${data.latency_ms}ms`)
       } else {
@@ -138,9 +141,9 @@ export default function TestPage() {
                   <SelectValue placeholder="选择 API Key" />
                 </SelectTrigger>
                 <SelectContent>
-                  {keys.filter((key) => key.status === 'active').map((key) => (
+                  {keys.map((key) => (
                     <SelectItem key={key.id} value={key.plain_key || ''}>
-                      {key.name} ({key.key_prefix}****)
+                      {key.name} ({key.key_prefix}****) {key.status === 'active' ? '[启用]' : '[禁用]'}
                     </SelectItem>
                   ))}
                 </SelectContent>

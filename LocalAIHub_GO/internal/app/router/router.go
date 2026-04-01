@@ -69,6 +69,7 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 	mux.Handle("DELETE /admin/api/v1/models/", adminAuthMiddleware(authService, dynamicModelHandler(handlers.Models)))
 	mux.Handle("POST /admin/api/v1/models/", adminAuthMiddleware(authService, dynamicModelHandler(handlers.Models)))
 	mux.Handle("GET /admin/api/v1/client-keys/", adminAuthMiddleware(authService, dynamicClientKeyHandler(handlers.ClientKey)))
+	mux.Handle("PUT /admin/api/v1/client-keys/", adminAuthMiddleware(authService, dynamicClientKeyHandler(handlers.ClientKey)))
 	mux.Handle("DELETE /admin/api/v1/client-keys/", adminAuthMiddleware(authService, dynamicClientKeyHandler(handlers.ClientKey)))
 	mux.Handle("POST /admin/api/v1/client-keys/", adminAuthMiddleware(authService, dynamicClientKeyHandler(handlers.ClientKey)))
 	mux.Handle("GET /admin/api/v1/routes/", adminAuthMiddleware(authService, dynamicRouteHandler(handlers)))

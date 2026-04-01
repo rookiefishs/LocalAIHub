@@ -52,7 +52,7 @@ func (h *ToolsHandler) TestRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authHeader := "Bearer " + input.APIKey
-	client, err := h.gatewayService.AuthenticateClient(r.Context(), authHeader)
+	client, err := h.gatewayService.AuthenticateClientForTest(r.Context(), authHeader)
 	if err != nil {
 		response.AdminError(w, r, http.StatusUnauthorized, 401100, "invalid api key: "+err.Error())
 		return
@@ -71,12 +71,14 @@ func (h *ToolsHandler) TestRequest(w http.ResponseWriter, r *http.Request) {
 	latency := int(time.Since(start).Milliseconds())
 
 	if err != nil {
+		_ = h.gatewayService.UpdateClientStatusAfterTest(r.Context(), client.ID, false)
 		response.AdminSuccess(w, r, map[string]any{
 			"success":     false,
 			"model":       input.Model,
 			"latency_ms":  latency,
 			"error":       err.Error(),
 			"status_code": statusCode,
+			"key_status":  "disabled",
 		})
 		return
 	}
@@ -94,6 +96,8 @@ func (h *ToolsHandler) TestRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	_ = h.gatewayService.UpdateClientStatusAfterTest(r.Context(), client.ID, true)
+
 	response.AdminSuccess(w, r, map[string]any{
 		"success":           true,
 		"model":             input.Model,
@@ -101,6 +105,7 @@ func (h *ToolsHandler) TestRequest(w http.ResponseWriter, r *http.Request) {
 		"prompt_tokens":     promptTokens,
 		"completion_tokens": completionTokens,
 		"total_tokens":      totalTokens,
+		"key_status":        "active",
 		"response":          resp,
 	})
 }

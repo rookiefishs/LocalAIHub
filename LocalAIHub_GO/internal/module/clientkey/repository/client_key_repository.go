@@ -196,12 +196,19 @@ func (r *ClientKeyRepository) ListActive(ctx context.Context) ([]ClientKey, erro
 	return items, rows.Err()
 }
 
-func (r *ClientKeyRepository) Update(ctx context.Context, id int64, name, remark string) error {
+func (r *ClientKeyRepository) Update(ctx context.Context, id int64, name, remark, expiresAt string) error {
 	var remarkPtr *string
 	if remark != "" {
 		remarkPtr = &remark
 	}
-	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET name = ?, remark = ?, updated_at = ? WHERE id = ?`, name, remarkPtr, time.Now().UTC(), id)
+	var expiresAtPtr *time.Time
+	if expiresAt != "" {
+		t, err := time.Parse("2006-01-02", expiresAt)
+		if err == nil {
+			expiresAtPtr = &t
+		}
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET name = ?, remark = ?, expires_at = ?, updated_at = ? WHERE id = ?`, name, remarkPtr, expiresAtPtr, time.Now().UTC(), id)
 	return err
 }
 

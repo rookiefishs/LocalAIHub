@@ -76,13 +76,14 @@ func (h *ClientKeyHandler) Update(w http.ResponseWriter, r *http.Request, id int
 	var req struct {
 		Name          string  `json:"name"`
 		Remark        string  `json:"remark"`
+		ExpiresAt     string  `json:"expires_at"`
 		AllowedModels []int64 `json:"allowed_models"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid parameters")
 		return
 	}
-	if err := h.service.Update(r.Context(), id, req.Name, req.Remark, netx.ClientIP(r), r.UserAgent(), req.AllowedModels); err != nil {
+	if err := h.service.Update(r.Context(), id, req.Name, req.Remark, req.ExpiresAt, netx.ClientIP(r), r.UserAgent(), req.AllowedModels); err != nil {
 		response.AdminError(w, r, http.StatusInternalServerError, 500100, "update client key failed")
 		return
 	}

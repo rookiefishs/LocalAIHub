@@ -111,6 +111,35 @@ func (s *GatewayService) AuthenticateClient(ctx context.Context, authHeader stri
 	return client, nil
 }
 
+func (s *GatewayService) AuthenticateClientForTest(ctx context.Context, authHeader string) (*repository.GatewayClient, error) {
+	apiKey := bearerOrRawKey(authHeader)
+	if apiKey == "" {
+		return nil, fmt.Errorf("missing api key")
+	}
+	hash := sha256.Sum256([]byte(apiKey))
+	hashString := hex.EncodeToString(hash[:])
+	client, err := s.repo.GetClientByHash(ctx, hashString)
+	if err != nil {
+		logger.Log.Error().Err(err).Str("hash", hashString).Msg("failed to get client by hash for test")
+		return nil, err
+	}
+	if client == nil {
+		return nil, fmt.Errorf("invalid client key")
+	}
+	if client.ExpiresAt != nil && client.ExpiresAt.Before(time.Now().UTC()) {
+		return nil, fmt.Errorf("client key expired")
+	}
+	_ = s.repo.TouchClientLastUsed(ctx, client.ID)
+	return client, nil
+}
+
+func (s *GatewayService) UpdateClientStatusAfterTest(ctx context.Context, clientID int64, success bool) error {
+	if success {
+		return s.repo.SetClientStatus(ctx, clientID, "active", true)
+	}
+	return s.repo.SetClientStatus(ctx, clientID, "disabled", false)
+}
+
 func (s *GatewayService) checkAndEnforceQuota(ctx context.Context, client *repository.GatewayClient) error {
 	exceeded := false
 	reason := ""

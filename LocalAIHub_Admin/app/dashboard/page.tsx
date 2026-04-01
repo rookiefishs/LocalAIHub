@@ -68,6 +68,44 @@ export default function DashboardPage() {
     ? '全部' 
     : clientKeys.find(k => k.id.toString() === selectedKey)?.name || '未知'
 
+  const keyStatsData = selectedKey === 'all' 
+    ? (data?.key_stats || []).map((item: any) => ({
+        name: item.key_name || '未知',
+        requests: item.request_count || 0,
+        tokens: item.total_tokens || 0,
+        success_rate: item.success_rate || 0,
+      }))
+    : []
+
+  const keyColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316']
+
+  const keyTrendData = selectedKey === 'all' && data?.key_trend ? data.key_trend : []
+  const keyNames = [...new Set(keyTrendData.map((t: any) => t.key_name))]
+  const allTimes = [...new Set(keyTrendData.map((t: any) => t.hour?.slice(11, 16)).filter(Boolean))]
+  
+  const unifiedTrendData = allTimes.map(time => {
+    const entry: any = { time }
+    keyNames.forEach((keyName: any) => {
+      const dataPoint = keyTrendData.find((t: any) => t.key_name === keyName && t.hour?.slice(11, 16) === time)
+      entry[keyName + '_requests'] = dataPoint ? (dataPoint.count || 0) : 0
+      entry[keyName + '_tokens'] = dataPoint ? (dataPoint.tokens || 0) : 0
+    })
+    return entry
+  })
+
+  const keyModelData = selectedKey === 'all' && data?.key_model_distribution ? data.key_model_distribution : []
+  const modelNames = [...new Set(keyModelData.map((t: any) => t.model_code))]
+  const keyModelNames = [...new Set(keyModelData.map((t: any) => t.key_name))]
+  
+  const modelChartData = modelNames.map((modelCode: any) => {
+    const entry: any = { modelCode }
+    keyModelNames.forEach((keyName: any) => {
+      const item = keyModelData.find((t: any) => t.model_code === modelCode && t.key_name === keyName)
+      entry[keyName] = item ? item.count : 0
+    })
+    return entry
+  })
+
   const chartData = data?.request_trend?.map((item: any) => ({
     time: item.hour?.slice(11, 16) || '',
     requests: item.count,
@@ -125,7 +163,34 @@ export default function DashboardPage() {
             <CardTitle>请求趋势 {selectedKey !== 'all' && <span className="text-sm font-normal text-muted-foreground">- {selectedKeyName}</span>}</CardTitle>
           </CardHeader>
           <CardContent>
-            {chartData.length > 0 ? (
+            {selectedKey === 'all' && unifiedTrendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={unifiedTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    {keyNames.map((_, idx) => (
+                      <linearGradient key={idx} id={`colorKey${idx}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={keyColors[idx % keyColors.length]} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={keyColors[idx % keyColors.length]} stopOpacity={0}/>
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ 
+                      background: 'var(--card)', 
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'var(--foreground)' }}
+                  />
+                  {keyNames.map((keyName: any, idx: number) => (
+                    <Area key={idx} type="monotone" dataKey={keyName + '_requests'} stackId="request" stroke={keyColors[idx % keyColors.length]} strokeWidth={2} fillOpacity={1} fill={`url(#colorKey${idx})`} name={keyName} />
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
@@ -161,7 +226,27 @@ export default function DashboardPage() {
             <CardTitle>Token 趋势 {selectedKey !== 'all' && <span className="text-sm font-normal text-muted-foreground">- {selectedKeyName}</span>}</CardTitle>
           </CardHeader>
           <CardContent>
-            {chartData.length > 0 ? (
+            {selectedKey === 'all' && unifiedTrendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={unifiedTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ 
+                      background: 'var(--card)', 
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'var(--foreground)' }}
+                    formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_tokens', '')]}
+                  />
+                  {keyNames.map((keyName: any, idx: number) => (
+                    <Bar key={idx} dataKey={keyName + '_tokens'} stackId="token" fill="#8B5CF6" name={keyName} radius={[4, 4, 0, 0]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            ) : chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -191,10 +276,29 @@ export default function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>模型分布</CardTitle>
+            <CardTitle>模型分布 {selectedKey === 'all' && <span className="text-sm font-normal text-muted-foreground">- 按 Key</span>}</CardTitle>
           </CardHeader>
           <CardContent>
-            {modelData.length > 0 ? (
+            {selectedKey === 'all' && modelNames.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={modelChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="modelCode" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} angle={-45} textAnchor="end" height={60} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ 
+                      background: 'var(--card)', 
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'var(--foreground)' }}
+                  />
+                  {keyModelNames.map((keyName: any, idx: number) => (
+                    <Bar key={idx} dataKey={keyName} stackId="model" fill={keyColors[idx % keyColors.length]} name={keyName} radius={[4, 4, 0, 0]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            ) : modelData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
@@ -222,31 +326,74 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>请求状态</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(59,130,246,0.05)' }}>
-                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>总请求</div>
-                <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{data?.request_count ?? 0}</div>
+        {selectedKey === 'all' && keyStatsData.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>各 Key 使用情况</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-[280px] overflow-y-auto">
+                {keyStatsData.map((item: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between p-3 rounded-[10px] border" style={{ borderColor: 'var(--border)' }}>
+                    <div>
+                      <div className="font-medium text-sm" style={{ color: 'var(--foreground)' }}>{item.name}</div>
+                      <div className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                        请求: {item.requests.toLocaleString()} | Token: {(item.tokens / 1000).toFixed(1)}k
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold" style={{ color: item.success_rate >= 0.9 ? '#10b981' : item.success_rate >= 0.5 ? '#f59e0b' : '#ef4444' }}>
+                        {Math.round(item.success_rate * 100)}%
+                      </div>
+                      <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>成功率</div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(16,185,129,0.05)' }}>
-                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>成功</div>
-                <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{data?.success_rate ? Math.round(data.request_count * data.success_rate) : 0}</div>
+            </CardContent>
+          </Card>
+        )}
+
+        {selectedKey === 'all' && keyStatsData.length === 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>各 Key 使用情况</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                暂无 Key 使用数据
               </div>
-              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(239,68,68,0.05)' }}>
-                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>失败</div>
-                <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{data?.request_count ? data.request_count - Math.round(data.request_count * (data.success_rate || 0)) : 0}</div>
+            </CardContent>
+          </Card>
+        )}
+
+        {selectedKey !== 'all' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>请求状态 {selectedKey !== 'all' && <span className="text-sm font-normal text-muted-foreground">- {selectedKeyName}</span>}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(59,130,246,0.05)' }}>
+                  <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>总请求</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{data?.request_count ?? 0}</div>
+                </div>
+                <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(16,185,129,0.05)' }}>
+                  <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>成功</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{data?.success_rate ? Math.round(data.request_count * data.success_rate) : 0}</div>
+                </div>
+                <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(239,68,68,0.05)' }}>
+                  <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>失败</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{data?.request_count ? data.request_count - Math.round(data.request_count * (data.success_rate || 0)) : 0}</div>
+                </div>
+                <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(139,92,246,0.05)' }}>
+                  <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>平均延迟</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#8b5cf6' }}>{data?.avg_latency_ms ?? 0}<span className="text-sm font-normal">ms</span></div>
+                </div>
               </div>
-              <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(139,92,246,0.05)' }}>
-                <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>平均延迟</div>
-                <div className="text-2xl font-bold mt-1" style={{ color: '#8b5cf6' }}>{data?.avg_latency_ms ?? 0}<span className="text-sm font-normal">ms</span></div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {error ? <div className="rounded-[10px] border px-4 py-3 text-sm" style={{ borderColor: 'rgba(239,95,114,0.25)', background: 'rgba(239,95,114,0.08)', color: '#ffb4bd' }}>{error}</div> : null}

@@ -217,6 +217,44 @@ func (r *GatewayRepository) GetRequestTrend(ctx context.Context, hours int, clie
 	return results, nil
 }
 
+type KeyTrend struct {
+	Hour    string `json:"hour"`
+	KeyName string `json:"key_name"`
+	Count   int64  `json:"count"`
+	Tokens  int64  `json:"tokens"`
+}
+
+func (r *GatewayRepository) GetRequestTrendByKey(ctx context.Context, hours int) ([]KeyTrend, error) {
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
+	query := `
+		SELECT 
+			DATE_FORMAT(CONVERT_TZ(rl.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:00') as hour,
+			COALESCE(ac.name, '未知') as key_name,
+			COUNT(*) as count,
+			COALESCE(SUM(rl.total_tokens), 0) as tokens
+		FROM request_log rl
+		LEFT JOIN api_client ac ON rl.client_id = ac.id
+		WHERE rl.created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)
+		GROUP BY hour, ac.name
+		ORDER BY hour ASC, count DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query, hours)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []KeyTrend
+	for rows.Next() {
+		var trend KeyTrend
+		if err := rows.Scan(&trend.Hour, &trend.KeyName, &trend.Count, &trend.Tokens); err != nil {
+			return nil, err
+		}
+		results = append(results, trend)
+	}
+	return results, rows.Err()
+}
+
 func (r *GatewayRepository) GetModelDistribution(ctx context.Context, hours int, clientID int64) ([]ModelStat, error) {
 	args := []any{hours}
 	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
@@ -249,6 +287,43 @@ func (r *GatewayRepository) GetModelDistribution(ctx context.Context, hours int,
 		results = append(results, stat)
 	}
 	return results, nil
+}
+
+type KeyModelStat struct {
+	KeyName   string `json:"key_name"`
+	ModelCode string `json:"model_code"`
+	Count     int64  `json:"count"`
+}
+
+func (r *GatewayRepository) GetModelDistributionByKey(ctx context.Context, hours int) ([]KeyModelStat, error) {
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
+	query := `
+		SELECT 
+			COALESCE(ac.name, '未知') as key_name,
+			COALESCE(rl.virtual_model_code, rl.upstream_model_name, 'unknown') as model_code,
+			COUNT(*) as count
+		FROM request_log rl
+		LEFT JOIN api_client ac ON rl.client_id = ac.id
+		WHERE rl.created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)
+		GROUP BY key_name, model_code
+		ORDER BY count DESC
+		LIMIT 20
+	`
+	rows, err := r.db.QueryContext(ctx, query, hours)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []KeyModelStat
+	for rows.Next() {
+		var stat KeyModelStat
+		if err := rows.Scan(&stat.KeyName, &stat.ModelCode, &stat.Count); err != nil {
+			return nil, err
+		}
+		results = append(results, stat)
+	}
+	return results, rows.Err()
 }
 
 func (r *GatewayRepository) CountSuccessRequests24h(ctx context.Context) (int64, error) {
@@ -730,4 +805,42 @@ func nullableString(value *string) any {
 		return nil
 	}
 	return *value
+}
+
+type KeyStat struct {
+	KeyName      string  `json:"key_name"`
+	RequestCount int64   `json:"request_count"`
+	TotalTokens  int64   `json:"total_tokens"`
+	SuccessRate  float64 `json:"success_rate"`
+}
+
+func (r *GatewayRepository) GetKeyStats(ctx context.Context, hours int) ([]KeyStat, error) {
+	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT 
+			ac.name as key_name,
+			COUNT(rl.id) as request_count,
+			COALESCE(SUM(rl.total_tokens), 0) as total_tokens,
+			COALESCE(AVG(CASE WHEN rl.success = 1 THEN 1.0 ELSE 0.0 END), 0) as success_rate
+		FROM api_client ac
+		LEFT JOIN request_log rl ON ac.id = rl.client_id AND rl.created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)
+		WHERE ac.status = 'active'
+		GROUP BY ac.id, ac.name
+		HAVING request_count > 0
+		ORDER BY request_count DESC
+	`, hours)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []KeyStat
+	for rows.Next() {
+		var stat KeyStat
+		if err := rows.Scan(&stat.KeyName, &stat.RequestCount, &stat.TotalTokens, &stat.SuccessRate); err != nil {
+			return nil, err
+		}
+		results = append(results, stat)
+	}
+	return results, rows.Err()
 }

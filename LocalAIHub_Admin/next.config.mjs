@@ -1,27 +1,14 @@
-/*
- * @Author: WangZhiYu <w19165802736@163.com>
- * @Date: 2026-03-30 18:06:26
- * @LastEditTime: 2026-04-01 00:27:27
- * @LastEditors: WangZhiYu <w19165802736@163.com>
- * @Descripttion: 
- */
-const basePath = process.env.BASE_PATH || (process.env.NODE_ENV === 'production' ? '/localaihub-admin' : '')
+import pkg from './package.json' with { type: 'json' }
+
+const basePath = process.env.BASE_PATH || '/localaihub-admin'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone',
+  output: 'export',
   basePath,
-  async rewrites() {
-    return {
-      beforeFiles: [
-        {
-          source: '/proxy/:path*',
-          destination: 'http://localhost:3334/proxy/:path*',
-        },
-      ],
-    }
-  },
+  images: { unoptimized: true },
+  trailingSlash: true,
 }
 
 export default nextConfig

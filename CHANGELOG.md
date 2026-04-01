@@ -23,6 +23,13 @@
 
 ## 2026/04/01
 
+- Fixed: API Key 编辑保存时报错 405，修复 PUT 路由缺失问题，同时修复过期时间更新逻辑。
+- Fixed: 修复 API Key 过期时间显示错误，过期或超出使用时间的 Key 过期时间和使用时间列显示红色。
+- Changed: 使用密钥弹框中的 Base URL 改为显示到 /proxy/openai/v1，方便复制。
+- Changed: 仪表盘支持按 Key 分别显示使用情况，全部 Key 时请求趋势、Token 趋势、模型分布图表分别按 Key 显示不同颜色堆叠显示，选中单个 Key 时显示该 Key 详细请求状态。
+- Added: 仪表盘新增后端接口返回各 Key 使用统计数据（key_stats、key_trend、key_model_distribution）。
+- Fixed: 仪表盘 API Key 配置页面 baseURL 根据环境区分，开发环境显示 http://127.0.0.1:3334，生产环境显示域名形式。
+
 - Fixed: 侧边栏高亮逻辑优化，使用 mounted 状态确保 SSR 渲染正确，去除 URL 尾部斜杠后匹配，解决仪表盘及子路由高亮异常问题。
 - Fixed: 导出配置功能修复，移除不存在的 allowed_models_json 字段查询。
 - Changed: 配置导入导出页面复选框改为 Switch 开关组件，文件上传区域改为拖拽式样式，与整体项目主题保持一致。

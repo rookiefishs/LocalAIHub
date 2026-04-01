@@ -96,7 +96,12 @@ export default function KeysPage() {
       return
     }
     try {
-      await api.updateClientKey(editingKey.id, form)
+      await api.updateClientKey(editingKey.id, {
+        name: form.name,
+        remark: form.remark,
+        expires_at: form.expires_at === today ? '' : form.expires_at,
+        allowed_models: form.allowed_models
+      })
       showSuccess('保存成功')
       setEditingKey(null)
       setForm(defaultForm)
@@ -301,7 +306,9 @@ export default function KeysPage() {
                   <TableCell className="text-sm" style={{ color: item.expires_at && new Date(item.expires_at) < new Date() ? 'var(--danger)' : 'var(--muted-foreground)' }}>
                     {item.expires_at ? new Date(item.expires_at).toLocaleDateString() : '永久'}
                   </TableCell>
-                  <TableCell>{item.last_used_at ? new Date(item.last_used_at).toLocaleString() : '-'}</TableCell>
+                  <TableCell className="text-sm" style={{ color: item.expires_at && new Date(item.expires_at) < new Date() ? 'var(--danger)' : 'var(--muted-foreground)' }}>
+                    {item.last_used_at ? new Date(item.last_used_at).toLocaleString() : '-'}
+                  </TableCell>
                   <TableCell><span style={{ color: item.status === 'active' ? 'var(--success)' : 'var(--danger)' }}>{item.status === 'active' ? '启用' : '禁用'}</span></TableCell>
                     <TableCell>
                     <div className="flex gap-2">
@@ -400,21 +407,19 @@ export default function KeysPage() {
         {selectedKeyForUse && (() => {
           const getProxyURL = () => {
             if (typeof window === 'undefined') return 'http://127.0.0.1:3334'
-            const envBase = process.env.NEXT_PUBLIC_API_BASE_URL
-            if (envBase && (envBase.startsWith('http://') || envBase.startsWith('https://'))) {
-              return envBase.replace('/admin', '')
+            const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || ''
+            const isDev = envBase.includes('127.0.0.1') || envBase.includes('localhost')
+            if (isDev) {
+              return 'http://127.0.0.1:3334'
             }
-            if (envBase === '/localaihub-api') {
-              return window.location.origin + '/localaihub-api'
-            }
-            return window.location.origin
+            return window.location.origin + '/localaihub-api'
           }
           const baseURL = getProxyURL()
           const apiKey = selectedKeyForUse.plain_key || ''
           const allowedModelList = selectedKeyForUse.allowed_models?.length ? models.filter(m => selectedKeyForUse.allowed_models.includes(m.id)) : models
           const modelName = allowedModelList[0]?.model_code || 'gpt-5.4'
           const requestURL = `${baseURL}/proxy/openai/v1/chat/completions`
-          const configText = `Base URL: ${requestURL}\nAPI Key: ${apiKey}\nModel: ${modelName}`
+          const configText = `Base URL: ${baseURL}/proxy/openai/v1\nAPI Key: ${apiKey}\nModel: ${modelName}`
           const curlText = `curl ${requestURL} -H "Content-Type: application/json" -H "Authorization: Bearer ${apiKey}" --data-raw "{\\"model\\":\\"${modelName}\\",\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"hi\\"}],\\"max_tokens\\":5}"`
           
           return (

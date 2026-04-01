@@ -54,17 +54,66 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 	if requestCount > 0 {
 		successRate = float64(successCount) / float64(requestCount)
 	}
+
+	var keyStats []map[string]any
+	var keyTrendData []map[string]any
+	var keyModelDist []map[string]any
+	if clientID == 0 {
+		stats, err := h.gatewayRepo.GetKeyStats(r.Context(), hours)
+		if err != nil {
+			logger.Log.Error().Err(err).Msg("failed to get key stats")
+		}
+		for _, s := range stats {
+			keyStats = append(keyStats, map[string]any{
+				"key_name":      s.KeyName,
+				"request_count": s.RequestCount,
+				"total_tokens":  s.TotalTokens,
+				"success_rate":  s.SuccessRate,
+			})
+		}
+
+		trendDataByKey, err := h.gatewayRepo.GetRequestTrendByKey(r.Context(), hours)
+		if err != nil {
+			logger.Log.Error().Err(err).Msg("failed to get key trend")
+		} else {
+			for _, t := range trendDataByKey {
+				keyTrendData = append(keyTrendData, map[string]any{
+					"hour":     t.Hour,
+					"key_name": t.KeyName,
+					"count":    t.Count,
+					"tokens":   t.Tokens,
+				})
+			}
+		}
+
+		modelDistByKey, err := h.gatewayRepo.GetModelDistributionByKey(r.Context(), hours)
+		if err != nil {
+			logger.Log.Error().Err(err).Msg("failed to get key model dist")
+		} else {
+			for _, m := range modelDistByKey {
+				keyModelDist = append(keyModelDist, map[string]any{
+					"key_name":   m.KeyName,
+					"model_code": m.ModelCode,
+					"count":      m.Count,
+				})
+			}
+		}
+	}
+
 	response.AdminSuccess(w, r, map[string]any{
-		"request_count":         requestCount,
-		"success_rate":          successRate,
-		"avg_latency_ms":        avgLatency,
-		"active_upstream_count": activeUpstreams,
-		"open_circuit_count":    openCircuits,
-		"debug_session_count":   debugSessions,
-		"prompt_tokens":         promptTokens,
-		"completion_tokens":     completionTokens,
-		"total_tokens":          totalTokens,
-		"request_trend":         trendData,
-		"model_distribution":    modelDistribution,
+		"request_count":          requestCount,
+		"success_rate":           successRate,
+		"avg_latency_ms":         avgLatency,
+		"active_upstream_count":  activeUpstreams,
+		"open_circuit_count":     openCircuits,
+		"debug_session_count":    debugSessions,
+		"prompt_tokens":          promptTokens,
+		"completion_tokens":      completionTokens,
+		"total_tokens":           totalTokens,
+		"request_trend":          trendData,
+		"model_distribution":     modelDistribution,
+		"key_stats":              keyStats,
+		"key_trend":              keyTrendData,
+		"key_model_distribution": keyModelDist,
 	})
 }
