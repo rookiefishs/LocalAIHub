@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	gatewayrepo "localaihub/localaihub_go/internal/module/gateway/repository"
 	providerrepo "localaihub/localaihub_go/internal/module/provider/repository"
@@ -35,16 +36,35 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	openCircuits, _ := h.routeService.CountOpenCircuits(r.Context())
-	requestCount, _ := h.gatewayRepo.CountRequests(r.Context(), hours, clientID)
-	successCount, _ := h.gatewayRepo.CountSuccessRequests(r.Context(), hours, clientID)
-	avgLatency, _ := h.gatewayRepo.AvgLatency(r.Context(), hours, clientID)
-	activeUpstreams, _ := h.providerRepo.CountActive(r.Context())
-	debugSessions, _ := h.gatewayRepo.CountDebugSessions24h(r.Context())
-	promptTokens, completionTokens, totalTokens, _ := h.gatewayRepo.SumTokens(r.Context(), hours, clientID)
+	requestCount, err := h.gatewayRepo.CountRequests(r.Context(), hours, clientID)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to count requests")
+	}
+	successCount, err := h.gatewayRepo.CountSuccessRequests(r.Context(), hours, clientID)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to count success requests")
+	}
+	avgLatency, err := h.gatewayRepo.AvgLatency(r.Context(), hours, clientID)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to calculate average latency")
+	}
+	activeUpstreams, err := h.providerRepo.CountActive(r.Context())
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to count active upstreams")
+	}
+	debugSessions, err := h.gatewayRepo.CountDebugSessions24h(r.Context())
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to count debug sessions")
+	}
+	promptTokens, completionTokens, totalTokens, err := h.gatewayRepo.SumTokens(r.Context(), hours, clientID)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to sum tokens")
+	}
 	trendData, err := h.gatewayRepo.GetRequestTrend(r.Context(), hours, clientID)
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get request trend")
 	}
+	trendData = fillHourlyTrendData(trendData, hours)
 	modelDistribution, err := h.gatewayRepo.GetModelDistribution(r.Context(), hours, clientID)
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get model distribution")
@@ -76,6 +96,7 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			logger.Log.Error().Err(err).Msg("failed to get key trend")
 		} else {
+			trendDataByKey = fillHourlyKeyTrendData(trendDataByKey, hours)
 			for _, t := range trendDataByKey {
 				keyTrendData = append(keyTrendData, map[string]any{
 					"hour":     t.Hour,
@@ -102,6 +123,8 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 
 	response.AdminSuccess(w, r, map[string]any{
 		"request_count":          requestCount,
+		"success_count":          successCount,
+		"failure_count":          maxInt64(requestCount-successCount, 0),
 		"success_rate":           successRate,
 		"avg_latency_ms":         avgLatency,
 		"active_upstream_count":  activeUpstreams,
@@ -116,4 +139,66 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 		"key_trend":              keyTrendData,
 		"key_model_distribution": keyModelDist,
 	})
+}
+
+func fillHourlyTrendData(items []gatewayrepo.HourlyStat, hours int) []gatewayrepo.HourlyStat {
+	if hours <= 0 {
+		return items
+	}
+	byHour := make(map[string]gatewayrepo.HourlyStat, len(items))
+	for _, item := range items {
+		byHour[item.Hour] = item
+	}
+	loc := time.FixedZone("CST", 8*3600)
+	now := time.Now().UTC().In(loc).Truncate(time.Hour)
+	start := now.Add(time.Duration(-(hours - 1)) * time.Hour)
+	filled := make([]gatewayrepo.HourlyStat, 0, hours)
+	for current := start; !current.After(now); current = current.Add(time.Hour) {
+		key := current.Format("2006-01-02 15:00")
+		if item, ok := byHour[key]; ok {
+			filled = append(filled, item)
+			continue
+		}
+		filled = append(filled, gatewayrepo.HourlyStat{Hour: key})
+	}
+	return filled
+}
+
+func fillHourlyKeyTrendData(items []gatewayrepo.KeyTrend, hours int) []gatewayrepo.KeyTrend {
+	if hours <= 0 || len(items) == 0 {
+		return items
+	}
+	keyNames := make([]string, 0)
+	seenKeys := make(map[string]struct{})
+	byKeyHour := make(map[string]gatewayrepo.KeyTrend, len(items))
+	for _, item := range items {
+		if _, ok := seenKeys[item.KeyName]; !ok {
+			seenKeys[item.KeyName] = struct{}{}
+			keyNames = append(keyNames, item.KeyName)
+		}
+		byKeyHour[item.KeyName+"|"+item.Hour] = item
+	}
+	loc := time.FixedZone("CST", 8*3600)
+	now := time.Now().UTC().In(loc).Truncate(time.Hour)
+	start := now.Add(time.Duration(-(hours - 1)) * time.Hour)
+	filled := make([]gatewayrepo.KeyTrend, 0, hours*len(keyNames))
+	for current := start; !current.After(now); current = current.Add(time.Hour) {
+		hourKey := current.Format("2006-01-02 15:00")
+		for _, keyName := range keyNames {
+			lookupKey := keyName + "|" + hourKey
+			if item, ok := byKeyHour[lookupKey]; ok {
+				filled = append(filled, item)
+				continue
+			}
+			filled = append(filled, gatewayrepo.KeyTrend{Hour: hourKey, KeyName: keyName})
+		}
+	}
+	return filled
+}
+
+func maxInt64(value int64, floor int64) int64 {
+	if value < floor {
+		return floor
+	}
+	return value
 }

@@ -31,7 +31,11 @@ export default function SettingsPage() {
   async function handleExport() {
     setExporting(true)
     try {
-      const data = await api.exportConfig()
+      const params = new URLSearchParams()
+      Object.entries(exportModules).forEach(([key, value]) => {
+        params.set(key, String(value))
+      })
+      const data = await api.exportConfig(params.toString())
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -115,6 +119,11 @@ export default function SettingsPage() {
                   checked={exportModules.api_clients}
                   onChange={(e) => setExportModules({ ...exportModules, api_clients: e.target.checked })}
                   label="API Key"
+                />
+                <Switch
+                  checked={exportModules.provider_keys}
+                  onChange={(e) => setExportModules({ ...exportModules, provider_keys: e.target.checked })}
+                  label="Provider Keys"
                 />
               </div>
               <Button onClick={handleExport} loading={exporting}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { HiOutlineServerStack } from 'react-icons/hi2'
 import { LuActivity } from 'react-icons/lu'
 import { TbClockHour4 } from 'react-icons/tb'
@@ -17,6 +17,25 @@ interface ClientKey {
   name: string
   key_prefix: string
   status: string
+}
+
+function formatTrendLabel(hour: string, timeRange: string) {
+  if (!hour) return ''
+  const [datePart, timePart = ''] = hour.split(' ')
+  if (!datePart) return hour
+  if (timeRange === '1d') {
+    return timePart || hour
+  }
+  const [year, month, day] = datePart.split('-')
+  if (!year || !month || !day) return hour
+  return `${month}-${day} ${timePart}`.trim()
+}
+
+function buildTrendBuckets(hours: string[], timeRange: string) {
+  return hours.map((hour) => ({
+    hour,
+    label: formatTrendLabel(hour, timeRange),
+  }))
 }
 
 export default function DashboardPage() {
@@ -91,13 +110,19 @@ export default function DashboardPage() {
   const keyColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316']
 
   const keyTrendData = selectedKey === 'all' && effectiveData?.key_trend ? effectiveData.key_trend : []
-  const keyNames = [...new Set(keyTrendData.map((t: any) => t.key_name))]
-  const allTimes = [...new Set(keyTrendData.map((t: any) => t.hour?.slice(11, 16)).filter(Boolean))]
-  
-  const unifiedTrendData = allTimes.map(time => {
-    const entry: any = { time }
+  const keyNames = [...new Set(keyTrendData.map((t: any) => t.key_name).filter((value: any): value is string => Boolean(value)))]
+  const keyTrendHours = (keyTrendData as any[]).reduce((acc: string[], item: any) => {
+    if (typeof item?.hour === 'string' && item.hour && !acc.includes(item.hour)) {
+      acc.push(item.hour)
+    }
+    return acc
+  }, [])
+  const keyTrendBuckets = useMemo(() => buildTrendBuckets(keyTrendHours, timeRange), [keyTrendHours, timeRange])
+
+  const unifiedTrendData = keyTrendBuckets.map(({ hour, label }) => {
+    const entry: any = { hour, time: label }
     keyNames.forEach((keyName: any) => {
-      const dataPoint = keyTrendData.find((t: any) => t.key_name === keyName && t.hour?.slice(11, 16) === time)
+      const dataPoint = keyTrendData.find((t: any) => t.key_name === keyName && t.hour === hour)
       entry[keyName + '_requests'] = dataPoint ? (dataPoint.count || 0) : 0
       entry[keyName + '_tokens'] = dataPoint ? (dataPoint.tokens || 0) : 0
     })
@@ -117,12 +142,22 @@ export default function DashboardPage() {
     return entry
   })
 
-  const chartData = effectiveData?.request_trend?.map((item: any) => ({
-    time: item.hour?.slice(11, 16) || '',
-    requests: item.count,
-    success: item.success,
-    tokens: (item.total_tokens || 0),
-  })) || []
+  const chartData = useMemo(() => (effectiveData?.request_trend?.map((item: any) => ({
+    hour: item.hour || '',
+    time: formatTrendLabel(item.hour || '', timeRange),
+    requests: item.count || 0,
+    success: item.success || 0,
+    tokens: item.total_tokens || 0,
+  })) || []), [effectiveData?.request_trend, timeRange])
+
+  const requestChartSummary = useMemo(() => chartData.reduce((acc: { requests: number; tokens: number }, item: any) => {
+    acc.requests += item.requests || 0
+    acc.tokens += item.tokens || 0
+    return acc
+  }, { requests: 0, tokens: 0 }), [chartData])
+
+  const successCount = effectiveData?.success_count ?? Math.round((effectiveData?.request_count ?? requestChartSummary.requests) * (effectiveData?.success_rate || 0))
+  const failureCount = effectiveData?.failure_count ?? Math.max((effectiveData?.request_count ?? requestChartSummary.requests) - successCount, 0)
 
   const timeRangeLabel = timeRange === '1d' ? '24h' : timeRange === '3d' ? '3天' : '7天'
 
@@ -186,7 +221,7 @@ export default function DashboardPage() {
                     ))}
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -195,7 +230,8 @@ export default function DashboardPage() {
                       borderRadius: '8px'
                     }}
                     labelStyle={{ color: 'var(--foreground)' }}
-                    formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_requests', '')]}
+                     labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
+                     formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_requests', '')]}
                   />
                   {keyNames.map((keyName: any, idx: number) => (
                     <Area key={idx} type="monotone" dataKey={keyName + '_requests'} stackId="request" stroke={keyColors[idx % keyColors.length]} strokeWidth={2} fillOpacity={1} fill={`url(#colorKey${idx})`} name={keyName} />
@@ -212,7 +248,7 @@ export default function DashboardPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -221,6 +257,7 @@ export default function DashboardPage() {
                       borderRadius: '8px'
                     }}
                     labelStyle={{ color: 'var(--foreground)' }}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
                   />
                   <Area type="monotone" dataKey="requests" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorRequests)" name="请求数" />
                 </AreaChart>
@@ -242,7 +279,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={unifiedTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -251,7 +288,8 @@ export default function DashboardPage() {
                       borderRadius: '8px'
                     }}
                     labelStyle={{ color: 'var(--foreground)' }}
-                    formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_tokens', '')]}
+                     labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
+                     formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_tokens', '')]}
                   />
                   {keyNames.map((keyName: any, idx: number) => (
                     <Bar key={idx} dataKey={keyName + '_tokens'} stackId="token" fill="#8B5CF6" name={keyName} radius={[4, 4, 0, 0]} />
@@ -262,7 +300,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -271,12 +309,13 @@ export default function DashboardPage() {
                       borderRadius: '8px'
                     }}
                     labelStyle={{ color: 'var(--foreground)' }}
-                    formatter={(value: number) => [value.toLocaleString(), 'Token']}
+                     labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
+                     formatter={(value: number) => [value.toLocaleString(), 'Token']}
                   />
-                  <Bar dataKey="tokens" fill="#8b5cf6" name="Token" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
+                   <Bar dataKey="tokens" fill="#8b5cf6" name="Token" radius={[4, 4, 0, 0]} />
+                 </BarChart>
+               </ResponsiveContainer>
+             ) : (
               <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
                 暂无 Token 数据
               </div>
@@ -400,15 +439,15 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(59,130,246,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>总请求</div>
-                  <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{effectiveData?.request_count ?? 0}</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{effectiveData?.request_count ?? requestChartSummary.requests}</div>
                 </div>
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(16,185,129,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>成功</div>
-                  <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{effectiveData?.success_rate ? Math.round(effectiveData.request_count * effectiveData.success_rate) : 0}</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{successCount}</div>
                 </div>
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(239,68,68,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>失败</div>
-                  <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{effectiveData?.request_count ? effectiveData.request_count - Math.round(effectiveData.request_count * (effectiveData.success_rate || 0)) : 0}</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{failureCount}</div>
                 </div>
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(139,92,246,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>平均延迟</div>
