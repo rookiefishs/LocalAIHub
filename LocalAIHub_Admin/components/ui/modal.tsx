@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
-export function Modal({ open, title, children, onClose, footer }: { open: boolean; title: string; children: ReactNode; onClose: () => void; footer?: ReactNode }) {
+export function Modal({ open, title, children, onClose, footer, maxWidthClass = 'max-w-2xl' }: { open: boolean; title: string; children: ReactNode; onClose: () => void; footer?: ReactNode; maxWidthClass?: string }) {
   const [mounted, setMounted] = useState(false)
   const [show, setShow] = useState(false)
   const [opening, setOpening] = useState(false)
@@ -35,7 +35,7 @@ export function Modal({ open, title, children, onClose, footer }: { open: boolea
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`relative w-full max-w-2xl rounded-[10px] border p-0 transition-all duration-150 ${show && !opening ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}
+        className={`relative w-full ${maxWidthClass} rounded-[10px] border p-0 transition-all duration-150 ${show && !opening ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}
         style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
       >
         <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--border)' }}>
