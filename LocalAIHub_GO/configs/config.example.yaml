@@ -6,6 +6,7 @@ security:
   admin_session_secret: change-me
   encryption_key: change-me-too
   admin_password_plain: change-me-admin-password
+  allow_insecure_tls: false
 
 database:
   driver: mysql

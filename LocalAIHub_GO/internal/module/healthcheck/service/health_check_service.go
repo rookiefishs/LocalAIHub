@@ -306,6 +306,12 @@ func (s *HealthCheckService) doHealthCheckRequest(ctx context.Context, client *h
 		} else {
 			testURL += "/messages"
 		}
+	} else if p.ProviderType == "gemini" {
+		if withV1 {
+			testURL += "/v1beta/models/gemini-2.0-flash:generateContent"
+		} else {
+			testURL += "/models/gemini-2.0-flash:generateContent"
+		}
 	} else {
 		if withV1 {
 			testURL += "/v1/chat/completions"
@@ -313,9 +319,15 @@ func (s *HealthCheckService) doHealthCheckRequest(ctx context.Context, client *h
 			testURL += "/chat/completions"
 		}
 	}
-	req, _ := http.NewRequestWithContext(ctx, "POST", testURL, strings.NewReader(`{"model":"gpt-4o-mini","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`))
+	payload := `{"model":"gpt-4o-mini","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`
+	if p.ProviderType == "gemini" {
+		payload = `{"contents":[{"parts":[{"text":"hi"}]}]}`
+	}
+	req, _ := http.NewRequestWithContext(ctx, "POST", testURL, strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
-	if p.AuthType == "x_api_key" {
+	if p.ProviderType == "gemini" {
+		req.Header.Set("x-goog-api-key", secret)
+	} else if p.AuthType == "x_api_key" {
 		req.Header.Set("x-api-key", secret)
 	} else {
 		req.Header.Set("Authorization", "Bearer "+secret)

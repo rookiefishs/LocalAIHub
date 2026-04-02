@@ -30,6 +30,7 @@ type SecurityConfig struct {
 	EncryptionKey      string `yaml:"encryption_key"`
 	AdminPasswordHash  string `yaml:"admin_password_hash"`
 	AdminPasswordPlain string `yaml:"admin_password_plain"`
+	AllowInsecureTLS   bool   `yaml:"allow_insecure_tls"`
 }
 
 type DatabaseConfig struct {
@@ -111,6 +112,7 @@ func overrideFromEnv(cfg *Config) {
 	setString(&cfg.Security.EncryptionKey, "LOCALAIHUB_ENCRYPTION_KEY")
 	setString(&cfg.Security.AdminPasswordHash, "LOCALAIHUB_ADMIN_PASSWORD_HASH")
 	setString(&cfg.Security.AdminPasswordPlain, "LOCALAIHUB_ADMIN_PASSWORD_PLAIN")
+	setBool(&cfg.Security.AllowInsecureTLS, "LOCALAIHUB_ALLOW_INSECURE_TLS")
 	setString(&cfg.Database.Driver, "LOCALAIHUB_DB_DRIVER")
 	setString(&cfg.Database.DSN, "LOCALAIHUB_DB_DSN")
 	setString(&cfg.Database.InitSQLPath, "LOCALAIHUB_DB_INIT_SQL_PATH")
@@ -161,6 +163,15 @@ func setInt32(target *int32, envKey string) {
 		parsed, err := strconv.Atoi(value)
 		if err == nil {
 			*target = int32(parsed)
+		}
+	}
+}
+
+func setBool(target *bool, envKey string) {
+	if value := os.Getenv(envKey); value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err == nil {
+			*target = parsed
 		}
 	}
 }

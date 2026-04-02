@@ -82,7 +82,7 @@ func New() (*App, error) {
 	}
 	auditRepo := auditrepo.NewAuditRepository(db)
 	auditSvc := auditservice.NewAuditService(auditRepo)
-	authSvc := authservice.NewAuthService(adminRepo, cfg.Security.AdminSessionSecret)
+	authSvc := authservice.NewAuthService(adminRepo, cfg.Security.AdminSessionSecret, auditSvc)
 
 	providerRepo := providerrepo.NewProviderRepository(db)
 	providerKeyRepo := providerkeyrepo.NewProviderKeyRepository(db)
@@ -98,11 +98,11 @@ func New() (*App, error) {
 
 	routeRepo := routerepo.NewRouteRepository(db)
 	routeSvc := routeservice.NewRouteService(routeRepo, auditSvc)
-	gatewaySvc := gatewayservice.NewGatewayService(gatewayRepo, providerKeySvc, routeSvc)
+	gatewaySvc := gatewayservice.NewGatewayService(gatewayRepo, providerKeySvc, routeSvc, auditSvc, cfg.Security.AllowInsecureTLS)
 	logRepo := logrepo.NewLogRepository(db)
 	logSvc := logservice.NewLogService(gatewayRepo, logRepo)
 
-	configExportSvc := configexportservice.NewExportService(db)
+	configExportSvc := configexportservice.NewExportService(db, auditSvc)
 
 	handlers := router.Handlers{
 		Auth:        authhandler.NewAdminAuthHandler(authSvc),
@@ -115,7 +115,7 @@ func New() (*App, error) {
 		Route:       routehandler.NewRouteHandler(routeSvc),
 		Logs:        loghandler.NewLogHandler(logSvc),
 		Tools:       toolshandler.NewToolsHandler(gatewaySvc),
-		Config:      configexporthandler.NewConfigExportHandler(configExportSvc),
+		Config:      configexporthandler.NewConfigExportHandler(configExportSvc, auditSvc),
 	}
 
 	mux := router.New(handlers, authSvc, cfg.CORS.AllowedOrigins)

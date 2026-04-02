@@ -262,6 +262,13 @@ func tryAuthMode(ctx context.Context, client *http.Client, provider *repository.
 
 func doProviderAuthRequest(ctx context.Context, client *http.Client, provider *repository.Provider, secret, authType string, withV1 bool) (*http.Response, error) {
 	requestURL := testedURLWithSuffixAndAuth(provider, withV1)
+	if provider.ProviderType == "gemini" {
+		payload := `{"contents":[{"parts":[{"text":"hi"}]}]}`
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-goog-api-key", secret)
+		return client.Do(req)
+	}
 	if provider.ProviderType != "anthropic" {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 		if authType == "x_api_key" {
@@ -287,6 +294,9 @@ func doProviderAuthRequest(ctx context.Context, client *http.Client, provider *r
 
 func testedURLWithSuffixAndAuth(provider *repository.Provider, withV1 bool) string {
 	base := normalizedProviderBase(provider.BaseURL, withV1)
+	if provider.ProviderType == "gemini" {
+		return base + "/models/gemini-2.0-flash:generateContent"
+	}
 	if provider.ProviderType != "anthropic" {
 		return base + "/models"
 	}
@@ -305,11 +315,21 @@ func testedURLWithSuffixAndAuth(provider *repository.Provider, withV1 bool) stri
 func normalizedProviderBase(baseURL string, withV1 bool) string {
 	base := strings.TrimRight(baseURL, "/")
 	base = strings.ReplaceAll(base, "/v1/v1", "/v1")
+	base = strings.ReplaceAll(base, "/v1beta/v1beta", "/v1beta")
 	if withV1 {
+		if strings.HasSuffix(base, "/v1beta") {
+			return base
+		}
 		if strings.HasSuffix(base, "/v1") {
 			return base
 		}
+		if strings.Contains(base, "generativelanguage") {
+			return base + "/v1beta"
+		}
 		return base + "/v1"
+	}
+	if strings.HasSuffix(base, "/v1beta") {
+		return base
 	}
 	if strings.HasSuffix(base, "/v1") {
 		return base
