@@ -86,7 +86,7 @@ func New() (*App, error) {
 
 	providerRepo := providerrepo.NewProviderRepository(db)
 	providerKeyRepo := providerkeyrepo.NewProviderKeyRepository(db)
-	providerKeySvc := providerservice.NewProviderKeyService(providerKeyRepo, cfg.Security.EncryptionKey, auditSvc)
+	providerKeySvc := providerservice.NewProviderKeyService(providerKeyRepo, providerRepo, cfg.Security.EncryptionKey, auditSvc, 10*time.Second)
 	providerSvc := providerservice.NewProviderService(providerRepo, providerKeySvc, auditSvc)
 
 	modelRepo := modelrepo.NewModelRepository(db)

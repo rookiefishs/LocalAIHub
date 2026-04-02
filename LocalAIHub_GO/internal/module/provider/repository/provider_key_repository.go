@@ -16,6 +16,7 @@ type ProviderKey struct {
 	ProviderID       int64      `json:"provider_id"`
 	KeyMasked        string     `json:"key_masked"`
 	SecretEncrypted  string     `json:"-"`
+	PlainKey         string     `json:"plain_key,omitempty"`
 	Status           string     `json:"status"`
 	Priority         int        `json:"priority"`
 	FailCount        int        `json:"fail_count"`
@@ -86,6 +87,20 @@ func (r *ProviderKeyRepository) Create(ctx context.Context, item *ProviderKey) (
 
 func (r *ProviderKeyRepository) UpdateStatus(ctx context.Context, id int64, status string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE provider_key SET status = ?, updated_at = ? WHERE id = ?`, status, time.Now().UTC(), id)
+	return err
+}
+
+func (r *ProviderKeyRepository) Update(ctx context.Context, id int64, keyMasked, secretEncrypted string, priority int, remark string) error {
+	var remarkPtr *string
+	if remark != "" {
+		remarkPtr = &remark
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE provider_key SET key_masked = ?, secret_encrypted = ?, priority = ?, remark = ?, updated_at = ? WHERE id = ?`, keyMasked, secretEncrypted, priority, remarkPtr, time.Now().UTC(), id)
+	return err
+}
+
+func (r *ProviderKeyRepository) UpdatePriority(ctx context.Context, id int64, priority int) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE provider_key SET priority = ?, updated_at = ? WHERE id = ?`, priority, time.Now().UTC(), id)
 	return err
 }
 

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -89,70 +88,43 @@ func (s *ProviderService) Delete(ctx context.Context, id int64, ip, userAgent st
 
 func (s *ProviderService) TestConnection(ctx context.Context, item *repository.Provider, ip, userAgent string) (map[string]any, error) {
 	client := &http.Client{Timeout: time.Duration(item.TimeoutMS) * time.Millisecond}
-	start := time.Now()
-	testURL := normalizeURL(item.BaseURL, item.ProviderType)
-
-	logger.Log.Info().Int64("provider_id", item.ID).Str("test_url", testURL).Msg("testing provider connection")
-
-	var req *http.Request
-	var secret string
-
 	providerKey, secret, err := s.keyService.SelectForRequest(ctx, item.ID)
-	if err != nil || providerKey == nil || secret == "" {
-		logger.Log.Info().Int64("provider_id", item.ID).Msg("no provider key found, using GET request")
-		req, _ = http.NewRequestWithContext(ctx, "GET", testURL, nil)
-	} else {
-		logger.Log.Info().Int64("provider_id", item.ID).Bool("has_key", true).Str("auth_type", item.AuthType).Msg("using provider key for test")
-		chatURL := normalizeURLForChat(item.BaseURL, item.ProviderType)
-		if item.ProviderType == "anthropic" {
-			reqBody := `{"model":"claude-3-haiku-20240307","max_tokens":1,"messages":[{"role":"user","text":"hi"}]}`
-			req, _ = http.NewRequestWithContext(ctx, "POST", chatURL, strings.NewReader(reqBody))
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("x-api-key", secret)
-		} else {
-			reqBody := `{"model":"gpt-4o-mini","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`
-			req, _ = http.NewRequestWithContext(ctx, "POST", chatURL+"/chat/completions", strings.NewReader(reqBody))
-			req.Header.Set("Content-Type", "application/json")
-			if item.AuthType == "x_api_key" {
-				req.Header.Set("x-api-key", secret)
-			} else {
-				req.Header.Set("Authorization", "Bearer "+secret)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := probeProviderAuth(ctx, client, item, secret)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Success {
+		_ = s.repo.UpdateHealth(ctx, item.ID, "healthy", result.Message)
+		if result.AuthType != "" && result.AuthType != item.AuthType {
+			if err := s.repo.UpdateAuthType(ctx, item.ID, result.AuthType); err == nil {
+				item.AuthType = result.AuthType
 			}
 		}
-	}
-
-	resp, err := client.Do(req)
-	logger.Log.Info().Int64("provider_id", item.ID).Err(err).Str("url", req.URL.String()).Msg("request executed")
-	if err != nil {
-		logger.Log.Error().Int64("provider_id", item.ID).Err(err).Str("url", testURL).Msg("provider connection failed")
-		_ = s.repo.UpdateHealth(ctx, item.ID, "degraded", err.Error())
 		if s.audit != nil {
 			targetID := item.ID
-			s.audit.Log(ctx, "provider.test_connection", "provider", &targetID, map[string]any{"success": false, "error": err.Error()}, ip, userAgent)
+			details := map[string]any{"success": true, "auth_type": result.AuthType, "tested_url": result.TestedURL, "latency_ms": result.LatencyMs}
+			if result.AutoDetected {
+				details["auto_detected"] = true
+			}
+			s.audit.Log(ctx, "provider.test_connection", "provider", &targetID, details, ip, userAgent)
 		}
-		return map[string]any{"success": false, "latency_ms": int(time.Since(start).Milliseconds()), "message": err.Error(), "tested_url": testURL}, nil
+		return map[string]any{"success": true, "latency_ms": result.LatencyMs, "message": result.Message, "tested_url": result.TestedURL, "auth_type": result.AuthType, "auth_auto_detected": result.AutoDetected}, nil
 	}
-	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-	logger.Log.Info().Int64("provider_id", item.ID).Str("url", testURL).Int("status_code", resp.StatusCode).Str("response", string(body)).Msg("provider connection response")
-
-	healthStatus := "healthy"
-	message := "connection success"
-	if resp.StatusCode >= 400 {
-		if secret == "" {
-			message = "connection ok (no key configured)"
-		} else {
-			healthStatus = "degraded"
-			message = resp.Status
-		}
-	}
-	_ = s.repo.UpdateHealth(ctx, item.ID, healthStatus, message)
+	_ = s.repo.UpdateHealth(ctx, item.ID, "disabled", result.Message)
 	if s.audit != nil {
 		targetID := item.ID
-		s.audit.Log(ctx, "provider.test_connection", "provider", &targetID, map[string]any{"success": resp.StatusCode < 400, "status_code": resp.StatusCode}, ip, userAgent)
+		s.audit.Log(ctx, "provider.test_connection", "provider", &targetID, map[string]any{"success": false, "error": result.Message, "tested_url": result.TestedURL}, ip, userAgent)
 	}
-	return map[string]any{"success": resp.StatusCode < 400, "latency_ms": int(time.Since(start).Milliseconds()), "message": message, "tested_url": testURL}, nil
+	if providerKey != nil {
+		_ = s.keyService.ReportResult(ctx, providerKey.ID, false, result.Message)
+	}
+	return map[string]any{"success": false, "latency_ms": result.LatencyMs, "message": result.Message, "tested_url": result.TestedURL, "auth_type": result.AuthType, "auth_auto_detected": false}, nil
 }
 
 func normalizeURL(baseURL, providerType string) string {
@@ -172,13 +144,10 @@ func normalizeURL(baseURL, providerType string) string {
 	return url
 }
 
-func normalizeURLForChat(baseURL, providerType string) string {
+func normalizeURLWithoutV1(baseURL string) string {
 	url := strings.TrimRight(baseURL, "/")
 	url = strings.ReplaceAll(url, "/v1/v1", "/v1")
 	url = strings.ReplaceAll(url, "/v1/", "/")
-
-	if !strings.HasSuffix(url, "/v1") {
-		url += "/v1"
-	}
+	url = strings.TrimSuffix(url, "/v1")
 	return url
 }

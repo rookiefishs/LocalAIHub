@@ -304,7 +304,7 @@ VALUES
     ('logs', 'audit_log_retention_days', JSON_OBJECT('value', 30), 'Audit log retention days'),
     ('logs', 'debug_log_retention_days', JSON_OBJECT('value', 3), 'Debug log retention days'),
     ('health_check', 'enabled', JSON_OBJECT('value', true), '是否启用健康检查'),
-    ('health_check', 'interval_minutes', JSON_OBJECT('value', 60), '健康检查间隔（分钟）'),
+    ('health_check', 'interval_minutes', JSON_OBJECT('value', 3), '健康检查间隔（分钟）'),
     ('health_check', 'retention_days', JSON_OBJECT('value', 30), '健康检查日志保留天数');
 
 INSERT IGNORE INTO virtual_model (model_code, display_name, protocol_family, capability_flags, visible, status, sort_order, description, default_params_json)

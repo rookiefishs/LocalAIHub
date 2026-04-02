@@ -114,6 +114,14 @@ func (r *ProviderRepository) UpdateStatus(ctx context.Context, id int64, enabled
 	return nil
 }
 
+func (r *ProviderRepository) UpdateAuthType(ctx context.Context, id int64, authType string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE provider SET auth_type = ?, updated_at = ? WHERE id = ?`, authType, time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("update provider auth type: %w", err)
+	}
+	return nil
+}
+
 func (r *ProviderRepository) CountActive(ctx context.Context) (int64, error) {
 	var count int64
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM provider WHERE enabled = 1`).Scan(&count); err != nil {

@@ -80,7 +80,6 @@ func (s *HealthCheckService) checkAll(ctx context.Context) {
 	logger.Log.Info().Msg("starting health check cycle")
 	s.checkProviders(ctx)
 	s.checkProviderKeys(ctx)
-	s.checkClientKeys(ctx)
 	s.cleanOldLogs(ctx)
 	logger.Log.Info().Msg("health check cycle completed")
 }
@@ -109,13 +108,8 @@ func (s *HealthCheckService) checkProvider(ctx context.Context, p providerrepo.P
 	if err != nil {
 		errMsg = err.Error()
 		newStatus = "disabled"
-		s.providerRepo.UpdateStatus(ctx, p.ID, false)
 	} else {
-		enabled, _ := s.providerRepo.GetEnabled(ctx)
-		if !enabled {
-			newStatus = "enabled"
-			s.providerRepo.UpdateStatus(ctx, p.ID, true)
-		}
+		newStatus = "enabled"
 	}
 
 	if prevStatus != newStatus {
@@ -278,37 +272,55 @@ func (s *HealthCheckService) testProviderConnection(ctx context.Context, p *prov
 
 	key := keys[0]
 	client := &http.Client{Timeout: time.Duration(p.TimeoutMS) * time.Millisecond}
-
-	testURL := p.BaseURL
-	if p.ProviderType == "anthropic" {
-		testURL += "/v1/messages"
-	} else {
-		testURL += "/v1/chat/completions"
-	}
-
-	var req *http.Request
 	secret := key.SecretEncrypted
 
-	if p.AuthType == "x_api_key" {
-		req, _ = http.NewRequestWithContext(ctx, "POST", testURL, strings.NewReader(`{"model":"gpt-4o-mini","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("x-api-key", secret)
-	} else {
-		req, _ = http.NewRequestWithContext(ctx, "POST", testURL, strings.NewReader(`{"model":"gpt-4o-mini","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+secret)
+	resp, err := s.doHealthCheckRequest(ctx, client, p, secret, true)
+	if err == nil && resp != nil && resp.StatusCode < 400 {
+		resp.Body.Close()
+		return nil
+	}
+	if resp != nil {
+		resp.Body.Close()
 	}
 
-	resp, err := client.Do(req)
+	resp, err = s.doHealthCheckRequest(ctx, client, p, secret, false)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("upstream error: %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func (s *HealthCheckService) doHealthCheckRequest(ctx context.Context, client *http.Client, p *providerrepo.Provider, secret string, withV1 bool) (*http.Response, error) {
+	baseURL := strings.TrimRight(p.BaseURL, "/")
+	if !withV1 {
+		baseURL = strings.TrimSuffix(baseURL, "/v1")
+	}
+	testURL := baseURL
+	if p.ProviderType == "anthropic" {
+		if withV1 {
+			testURL += "/v1/messages"
+		} else {
+			testURL += "/messages"
+		}
+	} else {
+		if withV1 {
+			testURL += "/v1/chat/completions"
+		} else {
+			testURL += "/chat/completions"
+		}
+	}
+	req, _ := http.NewRequestWithContext(ctx, "POST", testURL, strings.NewReader(`{"model":"gpt-4o-mini","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	if p.AuthType == "x_api_key" {
+		req.Header.Set("x-api-key", secret)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+secret)
+	}
+	return client.Do(req)
 }
 
 func (s *HealthCheckService) testClientKeyConnection(ctx context.Context, k clientkeyrepo.ClientKey) error {

@@ -64,10 +64,12 @@ func (s *ClientKeyService) Create(ctx context.Context, name, remark, expiresAt s
 		if expiresAt == "permanent" {
 			expiresAtPtr = nil
 		} else {
-			days := 0
-			if _, err := fmt.Sscanf(expiresAt, "%d", &days); err == nil && days > 0 {
-				t := time.Now().UTC().AddDate(0, 0, days)
-				expiresAtPtr = &t
+			if !strings.Contains(expiresAt, "-") {
+				days := 0
+				if _, err := fmt.Sscanf(expiresAt, "%d", &days); err == nil && days > 0 {
+					t := time.Now().UTC().AddDate(0, 0, days)
+					expiresAtPtr = &t
+				}
 			} else {
 				t, err := time.Parse("2006-01-02", expiresAt)
 				if err == nil {

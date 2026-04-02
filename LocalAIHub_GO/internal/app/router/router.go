@@ -145,14 +145,38 @@ func dynamicProviderHandler(handler *providerhandler.ProviderHandler, keyHandler
 					keyHandler.UpdateStatus(w, r, keyID)
 					return
 				}
-				if len(parts) == 3 && r.Method == http.MethodDelete {
+				if len(parts) == 4 && parts[3] == "test" {
 					keyID, err := strconv.ParseInt(parts[2], 10, 64)
 					if err != nil {
 						response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid provider key id")
 						return
 					}
-					keyHandler.Delete(w, r, keyID)
+					keyHandler.Test(w, r, keyID)
 					return
+				}
+				if len(parts) == 4 && parts[3] == "priority" {
+					keyID, err := strconv.ParseInt(parts[2], 10, 64)
+					if err != nil {
+						response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid provider key id")
+						return
+					}
+					keyHandler.UpdatePriority(w, r, keyID)
+					return
+				}
+				if len(parts) == 3 {
+					keyID, err := strconv.ParseInt(parts[2], 10, 64)
+					if err != nil {
+						response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid provider key id")
+						return
+					}
+					if r.Method == http.MethodPut {
+						keyHandler.Update(w, r, keyID)
+						return
+					}
+					if r.Method == http.MethodDelete {
+						keyHandler.Delete(w, r, keyID)
+						return
+					}
 				}
 			}
 		}

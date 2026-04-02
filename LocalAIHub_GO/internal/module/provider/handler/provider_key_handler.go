@@ -47,6 +47,23 @@ func (h *ProviderKeyHandler) Create(w http.ResponseWriter, r *http.Request, prov
 	response.AdminSuccess(w, r, map[string]any{"id": id})
 }
 
+func (h *ProviderKeyHandler) Update(w http.ResponseWriter, r *http.Request, keyID int64) {
+	var req struct {
+		Secret   string `json:"secret"`
+		Priority int    `json:"priority"`
+		Remark   string `json:"remark"`
+	}
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid parameters")
+		return
+	}
+	if err := h.service.Update(r.Context(), keyID, req.Secret, req.Priority, req.Remark, netx.ClientIP(r), r.UserAgent()); err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, "update provider key failed")
+		return
+	}
+	response.AdminSuccess(w, r, map[string]any{"id": keyID})
+}
+
 func (h *ProviderKeyHandler) UpdateStatus(w http.ResponseWriter, r *http.Request, keyID int64) {
 	var req struct {
 		Status string `json:"status"`
@@ -68,4 +85,28 @@ func (h *ProviderKeyHandler) Delete(w http.ResponseWriter, r *http.Request, keyI
 		return
 	}
 	response.AdminSuccess(w, r, map[string]any{"id": keyID, "deleted": true})
+}
+
+func (h *ProviderKeyHandler) Test(w http.ResponseWriter, r *http.Request, keyID int64) {
+	result, err := h.service.TestConnection(r.Context(), keyID)
+	if err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, err.Error())
+		return
+	}
+	response.AdminSuccess(w, r, result)
+}
+
+func (h *ProviderKeyHandler) UpdatePriority(w http.ResponseWriter, r *http.Request, keyID int64) {
+	var req struct {
+		Priority int `json:"priority"`
+	}
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid parameters")
+		return
+	}
+	if err := h.service.UpdatePriority(r.Context(), keyID, req.Priority); err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, "update priority failed")
+		return
+	}
+	response.AdminSuccess(w, r, map[string]any{"id": keyID, "priority": req.Priority})
 }
