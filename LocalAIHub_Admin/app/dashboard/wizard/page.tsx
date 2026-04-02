@@ -339,8 +339,11 @@ export default function WizardPage() {
                 {providers.map((provider) => (
                   <div
                     key={provider.id}
-                    className={`cursor-pointer rounded-[10px] border p-4 transition-all ${state.selectedProvider?.id === provider.id ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'hover:border-[var(--primary)]/50'}`}
-                    style={{ borderColor: state.selectedProvider?.id === provider.id ? 'var(--primary)' : 'var(--border)' }}
+                    className="cursor-pointer rounded-[10px] border p-4 transition-all hover:shadow-lg"
+                    style={{
+                      borderColor: state.selectedProvider?.id === provider.id ? 'var(--foreground)' : 'var(--border)',
+                      background: state.selectedProvider?.id === provider.id ? 'color-mix(in srgb, var(--foreground) 8%, transparent)' : undefined,
+                    }}
                     onClick={() => setState(prev => ({ ...prev, selectedProvider: provider }))}
                   >
                     <div className="flex items-center justify-between">
@@ -368,8 +371,11 @@ export default function WizardPage() {
                   {models.map((model) => (
                     <div
                       key={model.id}
-                      className={`cursor-pointer rounded-[10px] border p-4 transition-all ${state.selectedModelId === model.id ? 'border-[var(--primary)] bg-[var(--primary)]/10' : 'hover:border-[var(--primary)]/50'}`}
-                      style={{ borderColor: state.selectedModelId === model.id ? 'var(--primary)' : 'var(--border)' }}
+                      className="cursor-pointer rounded-[10px] border p-4 transition-all hover:shadow-lg"
+                      style={{
+                        borderColor: state.selectedModelId === model.id ? 'var(--foreground)' : 'var(--border)',
+                        background: state.selectedModelId === model.id ? 'color-mix(in srgb, var(--foreground) 8%, transparent)' : undefined,
+                      }}
                       onClick={() => setState(prev => ({ ...prev, selectedModelId: model.id }))}
                     >
                       <div className="flex items-center justify-between">
@@ -522,7 +528,7 @@ export default function WizardPage() {
               <div>
                 <div className="mb-2 text-sm font-medium" style={{ color: 'var(--foreground)' }}>调用示例</div>
                 <div className="relative">
-                  <pre className="overflow-auto rounded-xl border p-4 text-sm font-mono whitespace-pre-wrap" style={{ background: 'rgba(0,0,0,0.3)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>
+                  <pre className="overflow-auto rounded-xl border p-4 pr-20 text-sm font-mono whitespace-pre-wrap shadow-inner" style={{ background: 'color-mix(in srgb, var(--card) 82%, black 18%)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>
 {`curl ${getProxyURL()}/proxy/openai/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${createdApiKey}" \\
