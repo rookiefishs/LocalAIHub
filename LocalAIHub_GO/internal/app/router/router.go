@@ -59,7 +59,10 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 	mux.Handle("GET /admin/api/v1/routes", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Route.List)))
 	mux.Handle("GET /admin/api/v1/logs/requests", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ListRequestLogs)))
 	mux.Handle("GET /admin/api/v1/logs/audit", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ListAuditLogs)))
+	mux.Handle("GET /admin/api/v1/audit-logs", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ListAuditLogs)))
+	mux.Handle("GET /admin/api/v1/audit-logs/export", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ExportAuditLogs)))
 	mux.Handle("GET /admin/api/v1/logs/requests/", adminAuthMiddleware(authService, dynamicLogHandler(handlers.Logs)))
+	mux.Handle("GET /admin/api/v1/audit-logs/", adminAuthMiddleware(authService, dynamicAuditLogHandler(handlers.Logs)))
 	mux.Handle("GET /admin/api/v1/providers/", adminAuthMiddleware(authService, dynamicProviderHandler(handlers.Providers, handlers.ProviderKey)))
 	mux.Handle("PUT /admin/api/v1/providers/", adminAuthMiddleware(authService, dynamicProviderHandler(handlers.Providers, handlers.ProviderKey)))
 	mux.Handle("DELETE /admin/api/v1/providers/", adminAuthMiddleware(authService, dynamicProviderHandler(handlers.Providers, handlers.ProviderKey)))
@@ -390,5 +393,21 @@ func dynamicLogHandler(handler *loghandler.LogHandler) http.HandlerFunc {
 			return
 		}
 		handler.GetRequestLog(w, r, id)
+	}
+}
+
+func dynamicAuditLogHandler(handler *loghandler.LogHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/admin/api/v1/audit-logs/")
+		if strings.Trim(path, "/") == "export" {
+			handler.ExportAuditLogs(w, r)
+			return
+		}
+		id, err := strconv.ParseInt(strings.Trim(path, "/"), 10, 64)
+		if err != nil {
+			response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid audit log id")
+			return
+		}
+		handler.GetAuditLog(w, r, id)
 	}
 }

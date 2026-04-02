@@ -33,6 +33,34 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return payload as T
 }
 
+export async function apiDownload(path: string): Promise<void> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'GET',
+    headers,
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}))
+    throw new Error(payload?.message || payload?.error?.message || `Request failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i)
+  const fileName = fileNameMatch?.[1] || 'download.bin'
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export const api = {
   login: (body: { username: string; password: string }) => apiRequest<{ user: { id: number; username: string }; token: string }>('/admin/api/v1/auth/login', { method: 'POST', auth: false, body: JSON.stringify(body) }),
   me: () => apiRequest<{ user: { id: number; username: string; status: string } }>('/admin/api/v1/auth/me'),
@@ -73,9 +101,11 @@ export const api = {
   getClientKeyQuota: (id: number) => apiRequest<any>(`/admin/api/v1/client-keys/${id}/quota`),
   updateClientKeyQuota: (id: number, body: any) => apiRequest<any>(`/admin/api/v1/client-keys/${id}/quota`, { method: 'PUT', body: JSON.stringify(body) }),
   testRequest: (body: any) => apiRequest<any>('/admin/api/v1/tools/test-request', { method: 'POST', body: JSON.stringify(body) }),
-  exportConfig: () => apiRequest<any>('/admin/api/v1/config/export'),
+  exportConfig: (query = '') => apiRequest<any>(`/admin/api/v1/config/export${query ? `?${query}` : ''}`),
   importConfig: (body: any) => apiRequest<any>('/admin/api/v1/config/import', { method: 'POST', body: JSON.stringify(body) }),
   requestLogs: (query = '') => apiRequest<any>(`/admin/api/v1/logs/requests${query ? `?${query}` : ''}`),
   requestLogDetail: (id: number) => apiRequest<any>(`/admin/api/v1/logs/requests/${id}`),
-  auditLogs: (query = '') => apiRequest<any>(`/admin/api/v1/logs/audit${query ? `?${query}` : ''}`),
+  auditLogs: (query = '') => apiRequest<any>(`/admin/api/v1/audit-logs${query ? `?${query}` : ''}`),
+  auditLogDetail: (id: number) => apiRequest<any>(`/admin/api/v1/audit-logs/${id}`),
+  downloadAuditLogs: (query = '') => apiDownload(`/admin/api/v1/audit-logs/export${query ? `?${query}` : ''}`),
 }

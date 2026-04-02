@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -64,6 +65,9 @@ func (h *LogHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if targetID := parseInt64Query(r, "target_id"); targetID != nil {
 		filters.TargetID = targetID
 	}
+	if keyword := r.URL.Query().Get("keyword"); keyword != "" {
+		filters.Keyword = keyword
+	}
 	if start := parseTimeQuery(r, "start_time"); start != nil {
 		filters.StartTime = start
 	}
@@ -76,6 +80,50 @@ func (h *LogHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.AdminSuccess(w, r, map[string]any{"items": items, "total": total, "page": page, "page_size": limit})
+}
+
+func (h *LogHandler) GetAuditLog(w http.ResponseWriter, r *http.Request, id int64) {
+	item, err := h.service.GetAuditLog(r.Context(), id)
+	if err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, "get audit log failed")
+		return
+	}
+	if item == nil {
+		response.AdminError(w, r, http.StatusNotFound, 404100, "audit log not found")
+		return
+	}
+	response.AdminSuccess(w, r, item)
+}
+
+func (h *LogHandler) ExportAuditLogs(w http.ResponseWriter, r *http.Request) {
+	filters := logrepo.AuditLogFilters{Limit: 1000, Page: 1}
+	if adminUserID := parseInt64Query(r, "admin_user_id"); adminUserID != nil {
+		filters.AdminUserID = adminUserID
+	}
+	if action := r.URL.Query().Get("action"); action != "" {
+		filters.Action = action
+	}
+	if targetType := r.URL.Query().Get("target_type"); targetType != "" {
+		filters.TargetType = targetType
+	}
+	if targetID := parseInt64Query(r, "target_id"); targetID != nil {
+		filters.TargetID = targetID
+	}
+	if keyword := r.URL.Query().Get("keyword"); keyword != "" {
+		filters.Keyword = keyword
+	}
+	if start := parseTimeQuery(r, "start_time"); start != nil {
+		filters.StartTime = start
+	}
+	if end := parseTimeQuery(r, "end_time"); end != nil {
+		filters.EndTime = end
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="audit-logs-%s.csv"`, time.Now().UTC().Format("20060102-150405")))
+	if err := h.service.ExportAuditLogsCSV(r.Context(), filters, w); err != nil {
+		response.AdminError(w, r, http.StatusInternalServerError, 500100, "export audit logs failed")
+		return
+	}
 }
 
 func (h *LogHandler) GetRequestLog(w http.ResponseWriter, r *http.Request, id int64) {

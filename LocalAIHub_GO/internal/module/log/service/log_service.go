@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"io"
 
 	gatewayrepo "localaihub/localaihub_go/internal/module/gateway/repository"
 	logrepo "localaihub/localaihub_go/internal/module/log/repository"
@@ -26,4 +27,12 @@ func (s *LogService) GetRequestLog(ctx context.Context, id int64) (*gatewayrepo.
 
 func (s *LogService) ListAuditLogs(ctx context.Context, filters logrepo.AuditLogFilters) ([]logrepo.AuditLogRecord, int, error) {
 	return s.auditRepo.ListAuditLogs(ctx, filters)
+}
+
+func (s *LogService) GetAuditLog(ctx context.Context, id int64) (*logrepo.AuditLogRecord, error) {
+	return s.auditRepo.GetAuditLogByID(ctx, id)
+}
+
+func (s *LogService) ExportAuditLogsCSV(ctx context.Context, filters logrepo.AuditLogFilters, writer io.Writer) error {
+	return s.auditRepo.ExportAuditLogsCSV(ctx, filters, writer)
 }
