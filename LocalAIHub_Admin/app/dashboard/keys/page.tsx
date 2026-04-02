@@ -22,6 +22,7 @@ import { useRefresh } from '@/components/refresh-context'
 export default function KeysPage() {
   const [items, setItems] = useState<any[]>([])
   const [message, setMessage] = useState('')
+  const [loadingData, setLoadingData] = useState(true)
   const [keyModalOpen, setKeyModalOpen] = useState(false)
   const [editingKey, setEditingKey] = useState<any | null>(null)
   const [pendingDeleteKey, setPendingDeleteKey] = useState<any | null>(null)
@@ -48,13 +49,20 @@ export default function KeysPage() {
   const [loadingQuota, setLoadingQuota] = useState(false)
 
   async function load() {
-    const [keysData, modelsData] = await Promise.all([
-      api.clientKeys(`page=${page}&page_size=${pageSize}`),
-      api.models()
-    ])
-    setItems(keysData.items || [])
-    setTotal(keysData.total || 0)
-    setModels(modelsData.items || [])
+    setLoadingData(true)
+    try {
+      const [keysData, modelsData] = await Promise.all([
+        api.clientKeys(`page=${page}&page_size=${pageSize}`),
+        api.models()
+      ])
+      setItems(keysData.items || [])
+      setTotal(keysData.total || 0)
+      setModels(modelsData.items || [])
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : '加载失败')
+    } finally {
+      setLoadingData(false)
+    }
   }
 
   useEffect(() => { registerRefresh(load); load().catch((err) => setMessage(err.message)) }, [page, pageSize])
@@ -271,7 +279,16 @@ export default function KeysPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.length === 0 ? (
+              {loadingData ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="h-32 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                      加载中...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : items.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="h-32 text-center text-sm" style={{ color: 'var(--muted-foreground)' }}>暂无数据</TableCell>
                 </TableRow>
@@ -427,14 +444,14 @@ export default function KeysPage() {
               <div>
                 <div className="text-sm mb-1" style={{ color: 'var(--muted-foreground)' }}>配置内容</div>
                 <div className="relative">
-                  <pre className="p-3 rounded-[10px] border overflow-auto max-h-60 text-sm font-mono" style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{configText}</pre>
+                  <pre className="overflow-auto max-h-60 rounded-xl border p-4 pr-20 text-sm font-mono shadow-inner" style={{ background: 'color-mix(in srgb, var(--card) 82%, black 18%)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{configText}</pre>
                   <Button variant="secondary" size="sm" className="absolute top-2 right-2" onClick={() => { navigator.clipboard.writeText(configText); showSuccess('已复制') }}>复制</Button>
                 </div>
               </div>
               <div>
                 <div className="text-sm mb-1" style={{ color: 'var(--muted-foreground)' }}>Windows CMD 示例</div>
                 <div className="relative">
-                  <pre className="p-3 rounded-[10px] border overflow-auto max-h-60 text-sm font-mono whitespace-pre-wrap break-all" style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{curlText}</pre>
+                  <pre className="overflow-auto max-h-60 rounded-xl border p-4 pr-24 text-sm font-mono whitespace-pre-wrap break-all shadow-inner" style={{ background: 'color-mix(in srgb, var(--card) 82%, black 18%)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>{curlText}</pre>
                   <Button variant="secondary" size="sm" className="absolute top-2 right-2" onClick={() => { navigator.clipboard.writeText(curlText); showSuccess('已复制命令') }}>复制命令</Button>
                 </div>
               </div>
