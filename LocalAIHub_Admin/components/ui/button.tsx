@@ -6,14 +6,14 @@ import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-[10px] text-sm font-normal transition disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-2 rounded-[10px] text-sm font-normal transition-all duration-150 ease-out disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97]',
   {
     variants: {
       variant: {
-        default: 'bg-white text-black font-medium hover:bg-slate-100 border border-slate-200 dark:bg-slate-800 dark:text-white dark:border-slate-600 dark:hover:bg-slate-700',
-        secondary: 'border border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--muted)] font-normal',
-        ghost: 'hover:bg-[var(--muted)] text-[var(--foreground)] font-normal',
-        destructive: 'border border-[var(--danger)] bg-transparent text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white font-normal',
+        default: 'bg-white text-black font-medium hover:bg-slate-100 border border-slate-200 dark:bg-slate-800 dark:text-white dark:border-slate-600 dark:hover:bg-slate-700 hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.45)] hover:translate-y-[-0.5px] dark:hover:border-slate-400',
+        secondary: 'border border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--muted)] font-normal hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.45)] hover:translate-y-[-0.5px] dark:hover:border-slate-400',
+        ghost: 'hover:bg-[var(--muted)] text-[var(--foreground)] font-normal hover:translate-y-[-0.5px] dark:hover:bg-white/10',
+        destructive: 'border border-[var(--danger)] bg-transparent text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white font-normal hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.45)] hover:translate-y-[-0.5px] dark:hover:border-rose-300',
       },
       size: {
         default: 'h-9 px-3.5 py-2',

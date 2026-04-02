@@ -56,7 +56,7 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
           </Link>
           <button
             onClick={onToggle}
-            className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-[var(--sidebar-accent)]"
+            className="flex h-6 w-6 items-center justify-center rounded transition-all duration-200 hover:bg-[var(--sidebar-accent)] hover:scale-105 active:scale-95"
             style={{ color: 'var(--muted-foreground)' }}
           >
             {collapsed ? <FiChevronRight className="h-3.5 w-3.5" /> : <FiChevronLeft className="h-3.5 w-3.5" />}
@@ -76,14 +76,14 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
+                    className="sidebar-item flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm transition-all duration-200"
                     style={{
                       background: isActive ? 'var(--foreground)' : 'transparent',
                       color: isActive ? 'var(--background)' : 'var(--sidebar-foreground)',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                     }}
                   >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <Icon className="h-4 w-4 flex-shrink-0 transition-transform duration-200 hover:scale-110" />
                     {!collapsed && <span>{item.title}</span>}
                   </Link>
                 )
@@ -101,14 +101,14 @@ export function AppSidebar({ collapsed = false, onToggle }: AppSidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="flex items-center gap-3 rounded-[10px] px-3 py-2 text-sm transition-all"
+                    className="sidebar-item flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm transition-all duration-200"
                     style={{
                       background: isActive ? 'var(--foreground)' : 'transparent',
                       color: isActive ? 'var(--background)' : 'var(--sidebar-foreground)',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                     }}
                   >
-                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <Icon className="h-4 w-4 flex-shrink-0 transition-transform duration-200 hover:scale-110" />
                     {!collapsed && <span>{item.title}</span>}
                   </Link>
                 )
