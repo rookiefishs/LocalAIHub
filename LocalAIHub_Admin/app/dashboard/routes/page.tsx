@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { DragEvent, useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { GoDotFill } from 'react-icons/go'
 import { PiGitBranchBold } from 'react-icons/pi'
-import { RiAddLine, RiDeleteBinLine } from 'react-icons/ri'
+import { RiAddLine, RiDeleteBinLine, RiDraggable } from 'react-icons/ri'
 import { api } from '@/lib/api'
 import { StatCard } from '@/components/stat-card'
 import { Button } from '@/components/ui/button'
@@ -31,6 +32,9 @@ export default function RoutesPage() {
   const [loadingCreateRoute, setLoadingCreateRoute] = useState(false)
   const [loadingLock, setLoadingLock] = useState<number | null>(null)
   const [loadingBinding, setLoadingBinding] = useState(false)
+  const [savingBindingOrder, setSavingBindingOrder] = useState(false)
+  const [draggingBindingId, setDraggingBindingId] = useState<number | null>(null)
+  const [dragOverBindingId, setDragOverBindingId] = useState<number | null>(null)
   const [bindingForm, setBindingForm] = useState({ provider_id: '', provider_key_id: 0, upstream_model_name: '', priority: 1, enabled: true, is_same_name: false })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -50,7 +54,8 @@ export default function RoutesPage() {
 
   async function loadBindings(modelId: number) {
     const data = await api.modelBindings(modelId)
-    setBindings(data.items || [])
+    const sortedBindings = (data.items || []).sort((a: any, b: any) => a.priority - b.priority)
+    setBindings(sortedBindings)
   }
 
   useEffect(() => {
@@ -142,8 +147,10 @@ export default function RoutesPage() {
     }
     try {
       setLoadingBinding(true)
+      const nextPriority = bindings.length + 1
       await api.createModelBinding(selectedRoute.virtual_model_id, {
         ...bindingForm,
+        priority: nextPriority,
         provider_id: Number(bindingForm.provider_id),
         provider_key_id: bindingForm.provider_key_id || null
       })
@@ -156,6 +163,64 @@ export default function RoutesPage() {
     } finally {
       setLoadingBinding(false)
     }
+  }
+
+  function reorderBindings(items: any[], fromId: number, toId: number) {
+    const next = [...items]
+    const fromIndex = next.findIndex((item) => item.id === fromId)
+    const toIndex = next.findIndex((item) => item.id === toId)
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+      return items
+    }
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    return next.map((item, index) => ({ ...item, priority: index + 1 }))
+  }
+
+  async function persistBindingOrder(items: any[]) {
+    if (!selectedRoute) return
+    setSavingBindingOrder(true)
+    try {
+      await Promise.all(items.map((binding, index) => api.updateModelBinding(selectedRoute.virtual_model_id, binding.id, {
+        provider_id: binding.provider_id,
+        provider_key_id: binding.provider_key_id || null,
+        upstream_model_name: binding.upstream_model_name,
+        priority: index + 1,
+        enabled: binding.enabled,
+        is_same_name: binding.is_same_name,
+      })))
+      showSuccess('绑定顺序已更新')
+      await loadBindings(selectedRoute.virtual_model_id)
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '绑定顺序保存失败')
+      await loadBindings(selectedRoute.virtual_model_id)
+    } finally {
+      setSavingBindingOrder(false)
+    }
+  }
+
+  function handleBindingDragStart(bindingId: number) {
+    setDraggingBindingId(bindingId)
+    setDragOverBindingId(bindingId)
+  }
+
+  function handleBindingDragOver(event: DragEvent<HTMLDivElement>, bindingId: number) {
+    event.preventDefault()
+    if (draggingBindingId === null || draggingBindingId === bindingId) return
+    setDragOverBindingId(bindingId)
+    setBindings((current) => reorderBindings(current, draggingBindingId, bindingId))
+    setDraggingBindingId(bindingId)
+  }
+
+  async function handleBindingDrop() {
+    setDragOverBindingId(null)
+    if (draggingBindingId === null) return
+    setDraggingBindingId(null)
+  }
+
+  function handleBindingDragEnd() {
+    setDraggingBindingId(null)
+    setDragOverBindingId(null)
   }
 
   function openDetail(item: any) {
@@ -224,7 +289,12 @@ export default function RoutesPage() {
         onClose={() => setDetailModalOpen(false)}
         footer={
           <div className="flex justify-between gap-2">
-            <div>
+            <div className="flex items-center gap-2">
+              {selectedRoute && bindings.length > 1 && (
+                <Button variant="secondary" onClick={async () => await persistBindingOrder([...bindings])} disabled={savingBindingOrder} loading={savingBindingOrder}>
+                  保存顺序
+                </Button>
+              )}
               {selectedRoute && (
                 <Button variant="destructive" onClick={() => setPendingDeleteRoute(selectedRoute)}>
                   <RiDeleteBinLine className="mr-1 h-4 w-4" /> 删除路由
@@ -271,22 +341,40 @@ export default function RoutesPage() {
               {bindings.length === 0 ? (
                 <div className="text-sm py-4 text-center" style={{ color: 'var(--muted-foreground)' }}>暂无绑定</div>
               ) : (
-                <div className="space-y-2">
-                  {bindings.map((binding: any) => {
-                    const provider = providers.find((p: any) => p.id === binding.provider_id)
-                    return (
-                    <div key={binding.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: 'var(--border)' }}>
-                      <div className="text-sm">
-                        <div style={{ color: 'var(--foreground)' }}>{provider?.name || '未知供应商'} / {binding.upstream_model_name}</div>
-                        <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>优先级: {binding.priority}</div>
+                <div className="space-y-2 rounded-[10px] border p-4 text-sm" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.03)' }}>
+                  <AnimatePresence initial={false}>{bindings.map((binding: any) => {
+                     const provider = providers.find((p: any) => p.id === binding.provider_id)
+                     return (
+                    <motion.div
+                      key={binding.id}
+                      layout
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      draggable={!savingBindingOrder}
+                      onDragStart={() => handleBindingDragStart(binding.id)}
+                      onDragOver={(event) => handleBindingDragOver(event, binding.id)}
+                      onDrop={() => { void handleBindingDrop() }}
+                      onDragEnd={handleBindingDragEnd}
+                      className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors"
+                      style={{
+                        borderColor: dragOverBindingId === binding.id ? 'var(--primary)' : 'var(--border)',
+                        opacity: draggingBindingId === binding.id ? 0.75 : 1,
+                        background: dragOverBindingId === binding.id ? 'rgba(59,130,246,0.08)' : 'transparent',
+                      }}
+                    >
+                      <div className="min-w-0 flex flex-1 items-center gap-3 text-sm">
+                        <RiDraggable className="h-4 w-4 shrink-0 cursor-move text-slate-400" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate" style={{ color: 'var(--foreground)' }}>{provider?.name || '未知供应商'} / {binding.upstream_model_name}</div>
+                        </div>
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => setPendingDeleteBinding({ ...binding, virtual_model_id: selectedRoute.virtual_model_id })}>
                         删除
                       </Button>
-                    </div>
-                  )})}
+                    </motion.div>
+                  )})}</AnimatePresence>
                 </div>
               )}
+              {bindings.length > 1 ? <div className="mt-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>拖动左侧图标即可调整绑定顺序，点击"保存顺序"按钮后生效。</div> : null}
             </div>
           </div>
         )}
@@ -324,8 +412,8 @@ export default function RoutesPage() {
             <Input className="flex-1" value={bindingForm.upstream_model_name} onChange={(e) => setBindingForm({ ...bindingForm, upstream_model_name: e.target.value })} placeholder="gpt-4o" />
           </div>
           <div className="flex items-center gap-4">
-            <label className="w-20 text-sm" style={{ color: 'var(--foreground)' }}>优先级</label>
-            <Input className="flex-1" type="number" value={bindingForm.priority} onChange={(e) => setBindingForm({ ...bindingForm, priority: Number(e.target.value) })} />
+            <label className="w-20 text-sm" style={{ color: 'var(--foreground)' }}>顺序</label>
+            <Input className="flex-1" value={`自动追加到第 ${bindings.length + 1} 位`} readOnly />
           </div>
         </div>
       </Modal>

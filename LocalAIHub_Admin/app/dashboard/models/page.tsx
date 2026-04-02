@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { DragEvent, useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { FiLayers } from 'react-icons/fi'
 import { GoDotFill } from 'react-icons/go'
 import { HiOutlineCubeTransparent, HiOutlineBolt } from 'react-icons/hi2'
 import { PiGitBranchBold } from 'react-icons/pi'
-import { RiAddLine, RiDeleteBinLine, RiEditLine } from 'react-icons/ri'
+import { RiAddLine, RiDeleteBinLine, RiDraggable, RiEditLine } from 'react-icons/ri'
 import { api } from '@/lib/api'
 import { StatCard } from '@/components/stat-card'
 import { Button } from '@/components/ui/button'
@@ -72,7 +73,9 @@ export default function ModelsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [total, setTotal] = useState(0)
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [draggingBindingId, setDraggingBindingId] = useState<number | null>(null)
+  const [dragOverBindingId, setDragOverBindingId] = useState<number | null>(null)
+  const [savingBindingOrder, setSavingBindingOrder] = useState(false)
   const { showSuccess, showError } = useToast()
   const { registerRefresh } = useRefresh()
 
@@ -210,45 +213,64 @@ export default function ModelsPage() {
     }
   }
 
-  async function handleDragStart(index: number) {
-    setDraggedIndex(index)
+  function reorderBindings(items: Binding[], fromId: number, toId: number) {
+    const next = [...items]
+    const fromIndex = next.findIndex((item) => item.id === fromId)
+    const toIndex = next.findIndex((item) => item.id === toId)
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+      return items
+    }
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    return next.map((item, index) => ({ ...item, priority: index + 1 }))
   }
 
-  async function handleDragOver(e: React.DragEvent, index: number) {
-    e.preventDefault()
-  }
-
-  async function handleDrop(targetIndex: number) {
-    if (draggedIndex === null || draggedIndex === targetIndex || !selectedModelId) return
-    
-    const newBindings = [...bindings]
-    const [draggedItem] = newBindings.splice(draggedIndex, 1)
-    newBindings.splice(targetIndex, 0, draggedItem)
-    
-    const updatedPriorities = newBindings.map((b, i) => ({ ...b, priority: i + 1 }))
-    setBindings(updatedPriorities)
-    setDraggedIndex(null)
-    
-    setLoadingBinding(true)
+  async function persistBindingOrder(items: Binding[]) {
+    if (!selectedModelId) return
+    setSavingBindingOrder(true)
     try {
-      for (let i = 0; i < updatedPriorities.length; i++) {
-        const binding = updatedPriorities[i]
-        await api.updateModelBinding(selectedModelId, binding.id, {
-          provider_id: binding.provider_id,
-          provider_key_id: binding.provider_key_id || null,
-          upstream_model_name: binding.upstream_model_name,
-          priority: i + 1,
-          enabled: binding.enabled,
-          is_same_name: binding.is_same_name,
-        })
-      }
+      await Promise.all(items.map((binding, index) => api.updateModelBinding(selectedModelId, binding.id, {
+        provider_id: binding.provider_id,
+        provider_key_id: binding.provider_key_id || null,
+        upstream_model_name: binding.upstream_model_name,
+        priority: index + 1,
+        enabled: binding.enabled,
+        is_same_name: binding.is_same_name,
+      })))
       showSuccess('排序已更新')
+      await loadBindings(selectedModelId)
     } catch (err) {
       showError(err instanceof Error ? err.message : '更新排序失败')
       await loadBindings(selectedModelId)
     } finally {
-      setLoadingBinding(false)
+      setSavingBindingOrder(false)
     }
+  }
+
+  function handleBindingDragStart(bindingId: number) {
+    setDraggingBindingId(bindingId)
+    setDragOverBindingId(bindingId)
+  }
+
+  function handleBindingDragOver(event: DragEvent<HTMLDivElement>, bindingId: number) {
+    event.preventDefault()
+    if (draggingBindingId === null || draggingBindingId === bindingId) return
+    setDragOverBindingId(bindingId)
+    setBindings((current) => reorderBindings(current, draggingBindingId, bindingId))
+    setDraggingBindingId(bindingId)
+  }
+
+  async function handleBindingDrop() {
+    setDragOverBindingId(null)
+    if (draggingBindingId === null) return
+    const ordered = [...bindings]
+    setDraggingBindingId(null)
+    await persistBindingOrder(ordered)
+  }
+
+  function handleBindingDragEnd() {
+    setDraggingBindingId(null)
+    setDragOverBindingId(null)
   }
 
   return (
@@ -343,9 +365,18 @@ export default function ModelsPage() {
         title={`上游绑定 - ${selectedModelName}`}
         onClose={() => { setBindingDetailOpen(false); setSelectedModelId(null); setBindings([]) }}
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setBindingDetailOpen(false); setSelectedModelId(null); setBindings([]) }}>关闭</Button>
-            <Button onClick={() => { setBindingForm(initialBindingForm); setAddBindingOpen(true) }}><RiAddLine className="mr-1 h-4 w-4" />新增绑定</Button>
+          <div className="flex justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {bindings.length > 1 && (
+                <Button variant="secondary" onClick={async () => await persistBindingOrder([...bindings])} disabled={savingBindingOrder} loading={savingBindingOrder}>
+                  保存顺序
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => { setBindingDetailOpen(false); setSelectedModelId(null); setBindings([]) }}>关闭</Button>
+              <Button onClick={() => { setBindingForm(initialBindingForm); setAddBindingOpen(true) }}><RiAddLine className="mr-1 h-4 w-4" />新增绑定</Button>
+            </div>
           </div>
         }
       >
@@ -356,28 +387,30 @@ export default function ModelsPage() {
               <span className="text-xs">点击"新增绑定"添加上游</span>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>拖拽可调整优先级，优先级数字越小越优先</div>
-              {bindings.map((binding, index) => {
+            <div className="space-y-2 rounded-[10px] border p-4 text-sm" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.03)' }}>
+              <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>拖拽可调整优先级</div>
+              <AnimatePresence initial={false}>{bindings.map((binding) => {
                 const provider = providers.find(p => p.id === binding.provider_id)
                 const isEditing = editingBinding?.id === binding.id
                 return (
-                  <div
+                  <motion.div
                     key={binding.id}
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDrop={() => handleDrop(index)}
-                    className={`flex items-center gap-3 rounded-[10px] border p-3 ${draggedIndex === index ? 'opacity-50' : ''}`}
-                    style={{ 
-                      borderColor: 'var(--border)', 
-                      background: isEditing ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
-                      cursor: 'grab'
+                    layout
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    draggable={!savingBindingOrder}
+                    onDragStart={() => handleBindingDragStart(binding.id)}
+                    onDragOver={(event) => handleBindingDragOver(event, binding.id)}
+                    onDrop={() => { void handleBindingDrop() }}
+                    onDragEnd={handleBindingDragEnd}
+                    className="flex items-center justify-between gap-3 rounded-lg border p-3 transition-colors"
+                    style={{
+                      borderColor: dragOverBindingId === binding.id ? 'var(--primary)' : 'var(--border)',
+                      opacity: draggingBindingId === binding.id ? 0.75 : 1,
+                      background: dragOverBindingId === binding.id ? 'rgba(59,130,246,0.08)' : isEditing ? 'rgba(255,255,255,0.05)' : 'transparent',
                     }}
                   >
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium" style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>
-                      {binding.priority}
-                    </div>
+                    <div className="min-w-0 flex items-center gap-3 flex-1">
+                      <RiDraggable className="h-4 w-4 shrink-0 cursor-move text-slate-400" />
                     {isEditing ? (
                       <div className="flex-1 space-y-2">
                         <Input
@@ -403,7 +436,7 @@ export default function ModelsPage() {
                         </div>
                       </div>
                     ) : (
-                      <>
+                      <div className="flex-1 min-w-0">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <div style={{ color: 'var(--foreground)' }}>{binding.upstream_model_name}</div>
@@ -411,33 +444,34 @@ export default function ModelsPage() {
                           </div>
                           <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{provider?.name || `p${binding.provider_id}`}</div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" loading={testingBindings.has(binding.id)} onClick={async () => {
-                            if (!selectedModelId) return
-                            setTestingBindings(prev => new Set(prev).add(binding.id))
-                            try {
-                              const result = await api.testModelBinding(selectedModelId, binding.id)
-                              showSuccess(`测试成功: ${result.model || 'OK'}`)
-                            } catch (err) {
-                              showError(err instanceof Error ? err.message : '测试失败')
-                            } finally {
-                              setTestingBindings(prev => { const next = new Set(prev); next.delete(binding.id); return next })
-                            }
-                          }}>
-                            <HiOutlineBolt className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditingBinding(binding)}>
-                            <RiEditLine className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400" onClick={() => setPendingDeleteBinding(binding)}>
-                            <RiDeleteBinLine className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </>
+                      </div>
                     )}
-                  </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" loading={testingBindings.has(binding.id)} onClick={async () => {
+                        if (!selectedModelId) return
+                        setTestingBindings(prev => new Set(prev).add(binding.id))
+                        try {
+                          const result = await api.testModelBinding(selectedModelId, binding.id)
+                          showSuccess(`测试成功: ${result.model || 'OK'}`)
+                        } catch (err) {
+                          showError(err instanceof Error ? err.message : '测试失败')
+                        } finally {
+                          setTestingBindings(prev => { const next = new Set(prev); next.delete(binding.id); return next })
+                        }
+                      }}>
+                        <HiOutlineBolt className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditingBinding(binding)}>
+                        <RiEditLine className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-400" onClick={() => setPendingDeleteBinding(binding)}>
+                        <RiDeleteBinLine className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </motion.div>
                 )
-              })}
+              })}</AnimatePresence>
             </div>
           )}
         </div>
