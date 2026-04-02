@@ -116,7 +116,9 @@ func (r *RouteRepository) IsCircuitOpen(ctx context.Context, providerID, virtual
 		return false, nil
 	}
 	if nextRetry.Valid && nextRetry.Time.Before(time.Now().UTC()) {
-		_, _ = r.db.ExecContext(ctx, `UPDATE circuit_breaker_state SET state = 'half_open', updated_at = ? WHERE provider_id = ? AND virtual_model_id = ?`, time.Now().UTC(), providerID, virtualModelID)
+		if _, err := r.db.ExecContext(ctx, `UPDATE circuit_breaker_state SET state = 'half_open', updated_at = ? WHERE provider_id = ? AND virtual_model_id = ?`, time.Now().UTC(), providerID, virtualModelID); err != nil {
+			return true, err
+		}
 		return false, nil
 	}
 	return true, nil

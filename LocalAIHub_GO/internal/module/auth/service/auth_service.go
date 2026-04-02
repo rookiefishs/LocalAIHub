@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"localaihub/localaihub_go/internal/module/auth/repository"
+	"localaihub/localaihub_go/internal/pkg/logger"
 )
 
 var (
@@ -25,12 +27,18 @@ type Session struct {
 type AuthService struct {
 	repo      *repository.AdminRepository
 	jwtSecret string
+	audit     interface {
+		Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
+	}
 }
 
-func NewAuthService(repo *repository.AdminRepository, jwtSecret string) *AuthService {
+func NewAuthService(repo *repository.AdminRepository, jwtSecret string, audit interface {
+	Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
+}) *AuthService {
 	return &AuthService{
 		repo:      repo,
 		jwtSecret: jwtSecret,
+		audit:     audit,
 	}
 }
 
@@ -40,13 +48,23 @@ func (s *AuthService) Login(ctx context.Context, username, password, ip, userAge
 		return nil, err
 	}
 	if admin == nil || admin.Status != "active" {
-		_ = s.repo.CreateLoginLog(ctx, nil, username, "login_failed", ip, userAgent, "admin not found or disabled")
+		if err := s.repo.CreateLoginLog(ctx, nil, username, "login_failed", ip, userAgent, "admin not found or disabled"); err != nil {
+			logger.Log.Error().Err(err).Str("username", username).Msg("failed to create failed login log")
+		}
+		if s.audit != nil {
+			s.audit.Log(ctx, "login", "admin_user", nil, map[string]any{"username": username, "result": "failed", "reason": "admin not found or disabled", "ip": ip}, ip, userAgent)
+		}
 		return nil, ErrInvalidCredentials
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(admin.PasswordHash), []byte(password)); err != nil {
 		adminID := admin.ID
-		_ = s.repo.CreateLoginLog(ctx, &adminID, username, "login_failed", ip, userAgent, "password mismatch")
+		if err := s.repo.CreateLoginLog(ctx, &adminID, username, "login_failed", ip, userAgent, "password mismatch"); err != nil {
+			logger.Log.Error().Err(err).Int64("admin_id", adminID).Msg("failed to create password mismatch login log")
+		}
+		if s.audit != nil {
+			s.audit.Log(ctx, "login", "admin_user", &adminID, map[string]any{"username": username, "result": "failed", "reason": "password mismatch", "ip": ip}, ip, userAgent)
+		}
 		return nil, ErrInvalidCredentials
 	}
 
@@ -55,9 +73,16 @@ func (s *AuthService) Login(ctx context.Context, username, password, ip, userAge
 		return nil, err
 	}
 
-	_ = s.repo.UpdateLastLogin(ctx, admin.ID, ip)
+	if err := s.repo.UpdateLastLogin(ctx, admin.ID, ip); err != nil {
+		logger.Log.Error().Err(err).Int64("admin_id", admin.ID).Msg("failed to update last login")
+	}
 	adminID := admin.ID
-	_ = s.repo.CreateLoginLog(ctx, &adminID, username, "login_success", ip, userAgent, "ok")
+	if err := s.repo.CreateLoginLog(ctx, &adminID, username, "login_success", ip, userAgent, "ok"); err != nil {
+		logger.Log.Error().Err(err).Int64("admin_id", adminID).Msg("failed to create success login log")
+	}
+	if s.audit != nil {
+		s.audit.Log(ctx, "login", "admin_user", &adminID, map[string]any{"username": admin.Username, "result": "success", "ip": ip}, ip, userAgent)
+	}
 
 	return &Session{Token: token, AdminID: admin.ID, Username: admin.Username}, nil
 }
@@ -91,6 +116,15 @@ func (s *AuthService) Authenticate(tokenString string) (*Session, error) {
 		return nil, ErrUnauthorized
 	}
 	username, _ := claims["username"].(string)
+	if username == "" {
+		admin, lookupErr := s.repo.GetByID(context.Background(), int64(adminID))
+		if lookupErr == nil && admin != nil {
+			username = admin.Username
+		}
+	}
+	if username == "" {
+		username = fmt.Sprintf("admin#%d", int64(adminID))
+	}
 
 	return &Session{
 		Token:    tokenString,

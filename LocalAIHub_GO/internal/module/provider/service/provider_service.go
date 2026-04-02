@@ -99,7 +99,9 @@ func (s *ProviderService) TestConnection(ctx context.Context, item *repository.P
 	}
 
 	if result.Success {
-		_ = s.repo.UpdateHealth(ctx, item.ID, "healthy", result.Message)
+		if err := s.repo.UpdateHealth(ctx, item.ID, "healthy", result.Message); err != nil {
+			logger.Log.Error().Err(err).Int64("provider_id", item.ID).Msg("failed to update provider health to healthy")
+		}
 		if result.AuthType != "" && result.AuthType != item.AuthType {
 			if err := s.repo.UpdateAuthType(ctx, item.ID, result.AuthType); err == nil {
 				item.AuthType = result.AuthType
@@ -116,13 +118,17 @@ func (s *ProviderService) TestConnection(ctx context.Context, item *repository.P
 		return map[string]any{"success": true, "latency_ms": result.LatencyMs, "message": result.Message, "tested_url": result.TestedURL, "auth_type": result.AuthType, "auth_auto_detected": result.AutoDetected}, nil
 	}
 
-	_ = s.repo.UpdateHealth(ctx, item.ID, "disabled", result.Message)
+	if err := s.repo.UpdateHealth(ctx, item.ID, "disabled", result.Message); err != nil {
+		logger.Log.Error().Err(err).Int64("provider_id", item.ID).Msg("failed to update provider health to disabled")
+	}
 	if s.audit != nil {
 		targetID := item.ID
 		s.audit.Log(ctx, "provider.test_connection", "provider", &targetID, map[string]any{"success": false, "error": result.Message, "tested_url": result.TestedURL}, ip, userAgent)
 	}
 	if providerKey != nil {
-		_ = s.keyService.ReportResult(ctx, providerKey.ID, false, result.Message)
+		if err := s.keyService.ReportResult(ctx, providerKey.ID, false, result.Message); err != nil {
+			logger.Log.Error().Err(err).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key result after provider test failure")
+		}
 	}
 	return map[string]any{"success": false, "latency_ms": result.LatencyMs, "message": result.Message, "tested_url": result.TestedURL, "auth_type": result.AuthType, "auth_auto_detected": false}, nil
 }
@@ -140,6 +146,11 @@ func normalizeURL(baseURL, providerType string) string {
 		url += "/models"
 	case "anthropic":
 		url += "/v1/models"
+	case "gemini":
+		if !strings.HasSuffix(url, "/v1beta") {
+			url += "/v1beta"
+		}
+		url += "/models"
 	}
 	return url
 }

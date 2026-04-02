@@ -269,7 +269,9 @@ func (s *ProviderKeyService) TestConnection(ctx context.Context, keyID int64) (m
 				provider.AuthType = result.AuthType
 			}
 		}
-		_ = s.repo.MarkResult(ctx, key.ID, true, "")
+		if err := s.repo.MarkResult(ctx, key.ID, true, ""); err != nil {
+			logger.Log.Error().Err(err).Int64("key_id", key.ID).Msg("failed to mark provider key test success result")
+		}
 		return map[string]any{"success": true, "tested_url": result.TestedURL, "auth_type": result.AuthType, "auth_auto_detected": result.AutoDetected}, nil
 	}
 
@@ -282,6 +284,8 @@ func (s *ProviderKeyService) TestConnection(ctx context.Context, keyID int64) (m
 		Int("status_code", result.StatusCode).
 		Str("message", result.Message).
 		Msg("provider key connection test failed")
-	_ = s.repo.MarkResult(ctx, key.ID, false, result.Message)
+	if err := s.repo.MarkResult(ctx, key.ID, false, result.Message); err != nil {
+		logger.Log.Error().Err(err).Int64("key_id", key.ID).Msg("failed to mark provider key test failure result")
+	}
 	return map[string]any{"success": false, "error": result.Message, "tested_url": result.TestedURL, "auth_type": result.AuthType, "auth_auto_detected": false}, nil
 }

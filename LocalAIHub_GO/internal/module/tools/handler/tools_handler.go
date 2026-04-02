@@ -7,6 +7,7 @@ import (
 	"time"
 
 	gatewayservice "localaihub/localaihub_go/internal/module/gateway/service"
+	"localaihub/localaihub_go/internal/pkg/logger"
 	"localaihub/localaihub_go/internal/pkg/response"
 )
 
@@ -71,7 +72,9 @@ func (h *ToolsHandler) TestRequest(w http.ResponseWriter, r *http.Request) {
 	latency := int(time.Since(start).Milliseconds())
 
 	if err != nil {
-		_ = h.gatewayService.UpdateClientStatusAfterTest(r.Context(), client.ID, false)
+		if updateErr := h.gatewayService.UpdateClientStatusAfterTest(r.Context(), client.ID, false); updateErr != nil {
+			logger.Log.Error().Err(updateErr).Int64("client_id", client.ID).Msg("failed to update client status after failed test request")
+		}
 		response.AdminSuccess(w, r, map[string]any{
 			"success":     false,
 			"model":       input.Model,
@@ -96,7 +99,9 @@ func (h *ToolsHandler) TestRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_ = h.gatewayService.UpdateClientStatusAfterTest(r.Context(), client.ID, true)
+	if updateErr := h.gatewayService.UpdateClientStatusAfterTest(r.Context(), client.ID, true); updateErr != nil {
+		logger.Log.Error().Err(updateErr).Int64("client_id", client.ID).Msg("failed to update client status after successful test request")
+	}
 
 	response.AdminSuccess(w, r, map[string]any{
 		"success":           true,
