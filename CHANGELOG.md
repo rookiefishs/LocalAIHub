@@ -21,7 +21,32 @@
 - Refactor: 代码重构
 - Reverted: 回滚操作
 
-## 2026/04/01
+## 2026/04/02
+
+- Changed: 拖拽排序改为手动保存按钮，移除自动提交逻辑。虚拟模型上游绑定弹框、上游管理 Provider Keys 弹框、路由管理绑定列表弹框的排序均需点击"保存顺序"按钮后才落库。
+- Changed: 虚拟模型上游绑定弹框移除优先级数字显示，改为与上游管理 Key 管理一致的拖拽样式。
+- Changed: 侧边栏菜单选中边框改为基于主题的黑/白色（使用 var(--foreground)），选中背景改为 color-mix 混合色。
+
+- Added: 按钮添加鼠标悬停、点击动画和效果（hover:shadow + translate-y + active:scale）。
+- Changed: 页面切换动画加大，page-transition 组件改为 y:20 + scale:0.98 入场，duration 0.3s。
+- Changed: 仪表盘图表切换时不再清除当前数据，直接过渡到新数据，避免"闪烁"感。切换 Key 或时间范围时保持当前图表显示。
+- Changed: 仪表盘空数据时显示"暂无数据"或 skeleton，而非清空。StatCard 数字变化时有 fade 动画。
+- Changed: Select 下拉菜单打开和关闭添加 framer-motion 动画，宽度与 trigger 对齐（使用 Radix 变量）。
+- Changed: 表格加载状态优化，上游管理和 API Key 列表在请求中显示 spinner，数据返回后关闭 loading。
+
+- Fixed: 暗黑模式下侧边栏菜单悬停阴影不明显问题，在 globals.css 中添加 html.dark 下的白色投影样式。
+- Changed: 暗黑模式悬停阴影改为白色（rgba(255,255,255,0.28)），明亮模式使用黑色阴影。侧边栏菜单悬停时同时有背景亮起和 scale 效果。
+
+- Changed: API 测试工具默认 content 从"你好，请介绍一下自己"改为"1"。
+- Changed: 统一优化代码块样式（API 测试响应结果、使用密钥弹框、快捷流程调用示例），添加 border + shadow-inner + 主题适配背景。
+- Fixed: 开发环境 API 路径修正为 http://127.0.0.1:3334，生产环境保持 /localaihub-api。
+- Fixed: 开发环境 basePath 为空，生产环境为 /localaihub-admin，修复开发环境 404 问题。
+- Fixed: Logo 路径改为环境感知式，开发环境加载 /logo.png，生产环境加载 /localaihub-admin/logo.png。
+
+- Added: 新增 Provider 认证探测模块 provider_auth_probe.go，提取连接测试逻辑。
+- Removed: 删除 docs 目录下的旧 API 文档文件。
+
+- Fixed: Modal 组件新增 maxWidthClass 属性，支持自定义弹框宽度。
 
 - Fixed: API Key 编辑保存时报错 405，修复 PUT 路由缺失问题，同时修复过期时间更新逻辑。
 - Fixed: 修复 API Key 过期时间显示错误，过期或超出使用时间的 Key 过期时间和使用时间列显示红色。
