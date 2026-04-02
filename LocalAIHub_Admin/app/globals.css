@@ -71,6 +71,53 @@ html.dark body {
     linear-gradient(180deg, #0e1116 0%, #131820 48%, #10141a 100%);
 }
 
+.sidebar-item:hover {
+  box-shadow: 0 -6px 14px rgba(15, 23, 42, 0.12), 0 10px 18px rgba(15, 23, 42, 0.12);
+}
+
+html.dark .sidebar-item:hover {
+  background: var(--sidebar-accent);
+  box-shadow: 0 -8px 24px rgba(255, 255, 255, 0.28), 0 12px 32px rgba(255, 255, 255, 0.22);
+}
+
+.sidebar-item {
+  transition: all 0.2s ease;
+}
+
+.sidebar-item:hover {
+  transform: scale(1.02);
+}
+
+html.dark .card-hover:hover {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.52);
+}
+
+.card-hover:hover {
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10), 0 14px 20px rgba(15, 23, 42, 0.08);
+}
+
+html.dark .card-hover:hover {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.52);
+}
+
+.btn-hover:hover {
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+html.dark .btn-hover:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+.select-hover:hover {
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+html.dark .select-hover:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  background: rgba(255, 255, 255, 0.05);
+}
+
 body {
   margin: 0;
   color: var(--foreground);
