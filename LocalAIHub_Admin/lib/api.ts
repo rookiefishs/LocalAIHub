@@ -1,6 +1,7 @@
 import { getToken } from '@/lib/auth'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:3334' : '/localaihub-api')
+const isDev = process.env.NODE_ENV === 'development'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || (isDev ? 'http://127.0.0.1:3334' : '/localaihub-api')
 
 type RequestOptions = RequestInit & {
   auth?: boolean
@@ -46,6 +47,9 @@ export const api = {
   createProviderKey: (id: number, body: any) => apiRequest<any>(`/admin/api/v1/providers/${id}/keys`, { method: 'POST', body: JSON.stringify(body) }),
   deleteProviderKey: (providerId: number, keyId: number) => apiRequest<any>(`/admin/api/v1/providers/${providerId}/keys/${keyId}`, { method: 'DELETE' }),
   updateProviderKeyStatus: (providerId: number, keyId: number, status: string) => apiRequest<any>(`/admin/api/v1/providers/${providerId}/keys/${keyId}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+  testProviderKey: (providerId: number, keyId: number) => apiRequest<any>(`/admin/api/v1/providers/${providerId}/keys/${keyId}/test`, { method: 'POST', body: JSON.stringify({}) }),
+  updateProviderKey: (providerId: number, keyId: number, body: any) => apiRequest<any>(`/admin/api/v1/providers/${providerId}/keys/${keyId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  updateProviderKeyPriority: (providerId: number, keyId: number, priority: number) => apiRequest<any>(`/admin/api/v1/providers/${providerId}/keys/${keyId}/priority`, { method: 'POST', body: JSON.stringify({ priority }) }),
   models: (query = '') => apiRequest<any>(`/admin/api/v1/models${query ? `?${query}` : ''}`),
   createModel: (body: any) => apiRequest<any>('/admin/api/v1/models', { method: 'POST', body: JSON.stringify(body) }),
   updateModel: (id: number, body: any) => apiRequest<any>(`/admin/api/v1/models/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
