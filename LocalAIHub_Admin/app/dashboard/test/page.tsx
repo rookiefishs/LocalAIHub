@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 const defaultBody = {
   model: '',
   messages: [
-    { role: 'user', content: '你好，请介绍一下自己' }
+    { role: 'user', content: '1' }
   ],
   temperature: 0.7,
   max_tokens: 500,
@@ -111,11 +111,11 @@ export default function TestPage() {
   }
 
   function fillTemplate() {
-    const template = {
-      model: selectedModel || '',
-      messages: [
-        { role: 'user', content: '你好，请介绍一下自己' }
-      ],
+      const template = {
+        model: selectedModel || '',
+        messages: [
+        { role: 'user', content: '1' }
+        ],
       temperature: 0.7,
       max_tokens: 500,
       stream: false
@@ -235,7 +235,7 @@ export default function TestPage() {
                   {result.error}
                 </div>
               )}
-              <pre className="p-3 rounded text-sm font-mono overflow-auto max-h-[500px]" style={{ background: 'rgba(0,0,0,0.2)', color: 'var(--foreground)' }}>
+              <pre className="overflow-auto max-h-[500px] rounded-xl border p-4 text-sm font-mono shadow-inner" style={{ background: 'color-mix(in srgb, var(--card) 82%, black 18%)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>
                 {result.response ? JSON.stringify(result.response, null, 2) : JSON.stringify(result, null, 2)}
               </pre>
             </div>
