@@ -22,8 +22,10 @@ interface ClientKey {
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('1d')
   const [selectedKey, setSelectedKey] = useState<string>('all')
+  const [keySortBy, setKeySortBy] = useState<'tokens' | 'requests' | 'success_rate'>('tokens')
   const [clientKeys, setClientKeys] = useState<ClientKey[]>([])
   const { registerRefresh } = useRefresh()
 
@@ -37,6 +39,7 @@ export default function DashboardPage() {
   }
 
   async function loadDashboard() {
+    setLoading(true)
     try {
       const hours = timeRange === '1d' ? 24 : timeRange === '3d' ? 72 : 168
       const query = `?hours=${hours}${selectedKey !== 'all' ? `&client_id=${selectedKey}` : ''}`
@@ -45,6 +48,8 @@ export default function DashboardPage() {
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -68,18 +73,24 @@ export default function DashboardPage() {
     ? '全部' 
     : clientKeys.find(k => k.id.toString() === selectedKey)?.name || '未知'
 
+  const effectiveData = data
+
   const keyStatsData = selectedKey === 'all' 
-    ? (data?.key_stats || []).map((item: any) => ({
+    ? (effectiveData?.key_stats || []).map((item: any) => ({
         name: item.key_name || '未知',
         requests: item.request_count || 0,
         tokens: item.total_tokens || 0,
         success_rate: item.success_rate || 0,
-      }))
+      })).sort((a: any, b: any) => {
+        if (keySortBy === 'tokens') return b.tokens - a.tokens
+        if (keySortBy === 'requests') return b.requests - a.requests
+        return b.success_rate - a.success_rate
+      })
     : []
 
   const keyColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316']
 
-  const keyTrendData = selectedKey === 'all' && data?.key_trend ? data.key_trend : []
+  const keyTrendData = selectedKey === 'all' && effectiveData?.key_trend ? effectiveData.key_trend : []
   const keyNames = [...new Set(keyTrendData.map((t: any) => t.key_name))]
   const allTimes = [...new Set(keyTrendData.map((t: any) => t.hour?.slice(11, 16)).filter(Boolean))]
   
@@ -93,7 +104,7 @@ export default function DashboardPage() {
     return entry
   })
 
-  const keyModelData = selectedKey === 'all' && data?.key_model_distribution ? data.key_model_distribution : []
+  const keyModelData = selectedKey === 'all' && effectiveData?.key_model_distribution ? effectiveData.key_model_distribution : []
   const modelNames = [...new Set(keyModelData.map((t: any) => t.model_code))]
   const keyModelNames = [...new Set(keyModelData.map((t: any) => t.key_name))]
   
@@ -106,7 +117,7 @@ export default function DashboardPage() {
     return entry
   })
 
-  const chartData = data?.request_trend?.map((item: any) => ({
+  const chartData = effectiveData?.request_trend?.map((item: any) => ({
     time: item.hour?.slice(11, 16) || '',
     requests: item.count,
     success: item.success,
@@ -115,7 +126,7 @@ export default function DashboardPage() {
 
   const timeRangeLabel = timeRange === '1d' ? '24h' : timeRange === '3d' ? '3天' : '7天'
 
-  const modelData = (data?.model_distribution || []).map((item: any) => ({
+  const modelData = (effectiveData?.model_distribution || []).map((item: any) => ({
     name: item.model_code,
     value: item.count,
   }))
@@ -150,11 +161,11 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <StatCard title={`请求数 (${timeRangeLabel})`} value={data?.request_count ?? '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title={`成功率 (${timeRangeLabel})`} value={data ? `${Math.round((data.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title="平均延迟" value={data?.avg_latency_ms ? `${data.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title={`Token (${timeRangeLabel})`} value={data?.total_tokens ? `${(data.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title={`上游 (${timeRangeLabel})`} value={data?.active_upstream_count ?? '-'} subValue={data?.active_upstream_count ? "启用" : undefined} icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} href="/dashboard/upstreams" />
+        <StatCard title={`请求数 (${timeRangeLabel})`} value={effectiveData?.request_count ?? '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title={`成功率 (${timeRangeLabel})`} value={effectiveData ? `${Math.round((effectiveData.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title="平均延迟" value={effectiveData?.avg_latency_ms ? `${effectiveData.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title={`Token (${timeRangeLabel})`} value={effectiveData?.total_tokens ? `${(effectiveData.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+        <StatCard title={`上游 (${timeRangeLabel})`} value={effectiveData?.active_upstream_count ?? '-'} subValue={effectiveData?.active_upstream_count ? "启用" : undefined} icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} href="/dashboard/upstreams" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -184,6 +195,7 @@ export default function DashboardPage() {
                       borderRadius: '8px'
                     }}
                     labelStyle={{ color: 'var(--foreground)' }}
+                    formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_requests', '')]}
                   />
                   {keyNames.map((keyName: any, idx: number) => (
                     <Area key={idx} type="monotone" dataKey={keyName + '_requests'} stackId="request" stroke={keyColors[idx % keyColors.length]} strokeWidth={2} fillOpacity={1} fill={`url(#colorKey${idx})`} name={keyName} />
@@ -315,7 +327,14 @@ export default function DashboardPage() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: 'var(--card)', 
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'var(--foreground)' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -329,11 +348,24 @@ export default function DashboardPage() {
         {selectedKey === 'all' && keyStatsData.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>各 Key 使用情况</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>各 Key 使用情况</CardTitle>
+                <Select value={keySortBy} onValueChange={(v: any) => setKeySortBy(v)}>
+                  <SelectTrigger className="w-32 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tokens">Token 排序</SelectItem>
+                    <SelectItem value="requests">请求次数</SelectItem>
+                    <SelectItem value="success_rate">成功率</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 max-h-[280px] overflow-y-auto">
-                {keyStatsData.map((item: any, index: number) => (
+              {keyStatsData.length > 0 ? (
+                <div className="space-y-3 max-h-[280px] overflow-y-auto">
+                  {keyStatsData.map((item: any, index: number) => (
                   <div key={index} className="flex items-center justify-between p-3 rounded-[10px] border" style={{ borderColor: 'var(--border)' }}>
                     <div>
                       <div className="font-medium text-sm" style={{ color: 'var(--foreground)' }}>{item.name}</div>
@@ -349,20 +381,12 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {selectedKey === 'all' && keyStatsData.length === 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>各 Key 使用情况</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                暂无 Key 使用数据
-              </div>
+                </div>
+              ) : (
+                <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
+                  暂无 Key 使用数据
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -376,19 +400,19 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(59,130,246,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>总请求</div>
-                  <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{data?.request_count ?? 0}</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#3b82f6' }}>{effectiveData?.request_count ?? 0}</div>
                 </div>
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(16,185,129,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>成功</div>
-                  <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{data?.success_rate ? Math.round(data.request_count * data.success_rate) : 0}</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#10b981' }}>{effectiveData?.success_rate ? Math.round(effectiveData.request_count * effectiveData.success_rate) : 0}</div>
                 </div>
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(239,68,68,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>失败</div>
-                  <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{data?.request_count ? data.request_count - Math.round(data.request_count * (data.success_rate || 0)) : 0}</div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#ef4444' }}>{effectiveData?.request_count ? effectiveData.request_count - Math.round(effectiveData.request_count * (effectiveData.success_rate || 0)) : 0}</div>
                 </div>
                 <div className="rounded-[10px] border p-4" style={{ borderColor: 'var(--border)', background: 'rgba(139,92,246,0.05)' }}>
                   <div className="text-sm" style={{ color: 'var(--muted-foreground)' }}>平均延迟</div>
-                  <div className="text-2xl font-bold mt-1" style={{ color: '#8b5cf6' }}>{data?.avg_latency_ms ?? 0}<span className="text-sm font-normal">ms</span></div>
+                  <div className="text-2xl font-bold mt-1" style={{ color: '#8b5cf6' }}>{effectiveData?.avg_latency_ms ?? 0}<span className="text-sm font-normal">ms</span></div>
                 </div>
               </div>
             </CardContent>
