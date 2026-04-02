@@ -1,20 +1,27 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
 	"localaihub/localaihub_go/internal/module/configexport/service"
+	"localaihub/localaihub_go/internal/pkg/netx"
 	"localaihub/localaihub_go/internal/pkg/response"
 )
 
 type ConfigExportHandler struct {
-	svc *service.ExportService
+	svc   *service.ExportService
+	audit interface {
+		Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
+	}
 }
 
-func NewConfigExportHandler(svc *service.ExportService) *ConfigExportHandler {
-	return &ConfigExportHandler{svc: svc}
+func NewConfigExportHandler(svc *service.ExportService, audit interface {
+	Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
+}) *ConfigExportHandler {
+	return &ConfigExportHandler{svc: svc, audit: audit}
 }
 
 func (h *ConfigExportHandler) Export(w http.ResponseWriter, r *http.Request) {
@@ -22,6 +29,22 @@ func (h *ConfigExportHandler) Export(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		response.AdminError(w, r, http.StatusInternalServerError, 500100, "export failed: "+err.Error())
 		return
+	}
+	modules := map[string]bool{}
+	for _, key := range []string{"providers", "provider_keys", "virtual_models", "bindings", "api_clients"} {
+		if r.URL.Query().Get(key) != "false" {
+			modules[key] = true
+		}
+	}
+	data = h.svc.ExportModules(data, modules)
+	if h.audit != nil {
+		selectedModules := make([]string, 0, len(modules))
+		for key, enabled := range modules {
+			if enabled {
+				selectedModules = append(selectedModules, key)
+			}
+		}
+		h.audit.Log(r.Context(), "export", "system", nil, map[string]any{"modules": selectedModules}, netx.ClientIP(r), r.UserAgent())
 	}
 
 	result := map[string]interface{}{
@@ -67,6 +90,9 @@ func (h *ConfigExportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Options != nil && req.Options.DryRun {
+		if h.audit != nil {
+			h.audit.Log(r.Context(), "import.dry_run", "system", nil, map[string]any{"mode": opts.Mode}, netx.ClientIP(r), r.UserAgent())
+		}
 		summary := &service.ImportSummary{}
 		if providers, ok := req.Config["providers"].([]interface{}); ok {
 			for range providers {
@@ -100,6 +126,9 @@ func (h *ConfigExportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		response.AdminError(w, r, http.StatusInternalServerError, 500100, "import failed: "+err.Error())
 		return
+	}
+	if h.audit != nil {
+		h.audit.Log(r.Context(), "import", "system", nil, map[string]any{"mode": opts.Mode, "summary": summary}, netx.ClientIP(r), r.UserAgent())
 	}
 
 	response.AdminSuccess(w, r, map[string]interface{}{

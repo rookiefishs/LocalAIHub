@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -28,11 +29,16 @@ type ImportSummary struct {
 }
 
 type ExportService struct {
-	db *sql.DB
+	db    *sql.DB
+	audit interface {
+		Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
+	}
 }
 
-func NewExportService(db *sql.DB) *ExportService {
-	return &ExportService{db: db}
+func NewExportService(db *sql.DB, audit interface {
+	Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
+}) *ExportService {
+	return &ExportService{db: db, audit: audit}
 }
 
 func (s *ExportService) Export(ctx context.Context) (ExportData, error) {
@@ -121,6 +127,19 @@ func (s *ExportService) Import(ctx context.Context, data ExportData, opts Import
 	}
 
 	return summary, nil
+}
+
+func (s *ExportService) ExportModules(data ExportData, modules map[string]bool) ExportData {
+	if len(modules) == 0 {
+		return data
+	}
+	filtered := make(ExportData)
+	for key, value := range data {
+		if strings.HasPrefix(key, "exported_") || modules[key] {
+			filtered[key] = value
+		}
+	}
+	return filtered
 }
 
 func (s *ExportService) exportProviders(ctx context.Context) ([]map[string]interface{}, error) {
