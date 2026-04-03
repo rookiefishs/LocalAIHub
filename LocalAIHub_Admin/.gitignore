@@ -16,6 +16,7 @@ build/
 .env.development
 .env.production
 !.env.example
+deploy.sh
 
 # Logs
 logs/
@@ -43,3 +44,6 @@ coverage/
 # Misc
 *.tmp
 temp/
+
+# Deploy scripts
+deploy.sh

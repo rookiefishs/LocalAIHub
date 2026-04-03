@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.production
+deploy.sh
 
 # Config (keep config.example.yaml)
 configs/config.local.yaml
@@ -39,3 +40,6 @@ coverage/
 # Misc
 *.tmp
 temp/
+
+# Deploy scripts
+deploy.sh
