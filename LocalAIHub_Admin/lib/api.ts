@@ -1,7 +1,7 @@
 import { getToken } from '@/lib/auth'
 
 const isDev = process.env.NODE_ENV === 'development'
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || (isDev ? 'http://127.0.0.1:3334' : '/localaihub-api')
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || (isDev ? 'https://www.rookiefish.com/localaihub-api' : '/localaihub-api')
 
 type RequestOptions = RequestInit & {
   auth?: boolean

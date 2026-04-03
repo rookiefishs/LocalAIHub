@@ -10,7 +10,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-white text-black font-medium hover:bg-slate-100 border border-slate-200 dark:bg-slate-800 dark:text-white dark:border-slate-600 dark:hover:bg-slate-700 hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.45)] hover:translate-y-[-0.5px] dark:hover:border-slate-400',
+        default: 'bg-[var(--foreground)] text-[var(--background)] font-medium hover:opacity-90 hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.45)] hover:translate-y-[-0.5px]',
         secondary: 'border border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--muted)] font-normal hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.45)] hover:translate-y-[-0.5px] dark:hover:border-slate-400',
         ghost: 'hover:bg-[var(--muted)] text-[var(--foreground)] font-normal hover:translate-y-[-0.5px] dark:hover:bg-white/10',
         destructive: 'border border-[var(--danger)] bg-transparent text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white font-normal hover:shadow-[0_8px_20px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.45)] hover:translate-y-[-0.5px] dark:hover:border-rose-300',
@@ -18,7 +18,7 @@ const buttonVariants = cva(
       size: {
         default: 'h-9 px-3.5 py-2',
         sm: 'h-8 px-2.5',
-        lg: 'h-10 px-5',
+        lg: 'h-11 px-6 text-base',
         icon: 'h-9 w-9',
       },
     },

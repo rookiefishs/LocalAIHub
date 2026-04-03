@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 
 interface RefreshContextType {
   registerRefresh: (fn: () => void | Promise<void>) => void
@@ -12,13 +12,13 @@ const RefreshContext = createContext<RefreshContextType | null>(null)
 export function RefreshProvider({ children }: { children: ReactNode }) {
   const [refreshFn, setRefreshFn] = useState<() => void | Promise<void>>(() => {})
 
-  function registerRefresh(fn: () => void | Promise<void>) {
+  const registerRefresh = useCallback((fn: () => void | Promise<void>) => {
     setRefreshFn(() => fn)
-  }
+  }, [])
 
-  function triggerRefresh() {
+  const triggerRefresh = useCallback(() => {
     refreshFn()
-  }
+  }, [refreshFn])
 
   return (
     <RefreshContext.Provider value={{ registerRefresh, triggerRefresh }}>
