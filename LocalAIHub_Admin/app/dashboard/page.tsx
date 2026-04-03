@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { HiOutlineServerStack } from 'react-icons/hi2'
 import { LuActivity } from 'react-icons/lu'
 import { TbClockHour4 } from 'react-icons/tb'
@@ -31,13 +31,6 @@ function formatTrendLabel(hour: string, timeRange: string) {
   return `${month}-${day} ${timePart}`.trim()
 }
 
-function buildTrendBuckets(hours: string[], timeRange: string) {
-  return hours.map((hour) => ({
-    hour,
-    label: formatTrendLabel(hour, timeRange),
-  }))
-}
-
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState('')
@@ -60,8 +53,8 @@ export default function DashboardPage() {
   async function loadDashboard() {
     setLoading(true)
     try {
-      const hours = timeRange === '1d' ? 24 : timeRange === '3d' ? 72 : 168
-      const query = `?hours=${hours}${selectedKey !== 'all' ? `&client_id=${selectedKey}` : ''}`
+      const hours = timeRange === '1d' ? 24 : timeRange === '3d' ? 72 : timeRange === '7d' ? 168 : 720
+      const query = `hours=${hours}${selectedKey !== 'all' ? `&client_id=${selectedKey}` : ''}`
       const result = await api.dashboard(query)
       setData(result)
       setError('')
@@ -78,6 +71,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     registerRefresh(loadDashboard)
+  }, [registerRefresh])
+
+  useEffect(() => {
     loadDashboard()
   }, [timeRange, selectedKey])
 
@@ -110,19 +106,21 @@ export default function DashboardPage() {
   const keyColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316']
 
   const keyTrendData = selectedKey === 'all' && effectiveData?.key_trend ? effectiveData.key_trend : []
-  const keyNames = [...new Set(keyTrendData.map((t: any) => t.key_name).filter((value: any): value is string => Boolean(value)))]
-  const keyTrendHours = (keyTrendData as any[]).reduce((acc: string[], item: any) => {
-    if (typeof item?.hour === 'string' && item.hour && !acc.includes(item.hour)) {
-      acc.push(item.hour)
-    }
-    return acc
-  }, [])
-  const keyTrendBuckets = useMemo(() => buildTrendBuckets(keyTrendHours, timeRange), [keyTrendHours, timeRange])
+  
+  const activeKeyNames = new Set(clientKeys.map(k => k.name))
+  const filteredKeyTrendData = keyTrendData.filter((t: any) => activeKeyNames.has(t.key_name))
+  
+  const keyNames = [...new Set(filteredKeyTrendData.map((t: any) => t.key_name).filter((value: any): value is string => Boolean(value)))]
+  const keyTrendHours: string[] = [...new Set(filteredKeyTrendData.map((t: any) => t.hour).filter((value: any): value is string => Boolean(value)))].sort() as string[]
+  const keyTrendBuckets = keyTrendHours.map((hour: string) => ({
+    hour,
+    label: formatTrendLabel(hour, timeRange),
+  }))
 
   const unifiedTrendData = keyTrendBuckets.map(({ hour, label }) => {
     const entry: any = { hour, time: label }
     keyNames.forEach((keyName: any) => {
-      const dataPoint = keyTrendData.find((t: any) => t.key_name === keyName && t.hour === hour)
+      const dataPoint = filteredKeyTrendData.find((t: any) => t.key_name === keyName && t.hour === hour)
       entry[keyName + '_requests'] = dataPoint ? (dataPoint.count || 0) : 0
       entry[keyName + '_tokens'] = dataPoint ? (dataPoint.tokens || 0) : 0
     })
@@ -150,6 +148,30 @@ export default function DashboardPage() {
     tokens: item.total_tokens || 0,
   })) || []), [effectiveData?.request_trend, timeRange])
 
+  const emptyTrendData = useMemo(() => {
+    if (timeRange === '1d') {
+      return [
+        { hour: '', time: '00:00', requests: 0, success: 0, tokens: 0 },
+        { hour: '', time: '12:00', requests: 0, success: 0, tokens: 0 },
+        { hour: '', time: '23:59', requests: 0, success: 0, tokens: 0 },
+      ]
+    }
+
+    if (timeRange === '30d') {
+      return [
+        { hour: '', time: '起始', requests: 0, success: 0, tokens: 0 },
+        { hour: '', time: '中间', requests: 0, success: 0, tokens: 0 },
+        { hour: '', time: '当前', requests: 0, success: 0, tokens: 0 },
+      ]
+    }
+
+    return [
+      { hour: '', time: '开始', requests: 0, success: 0, tokens: 0 },
+      { hour: '', time: '中间', requests: 0, success: 0, tokens: 0 },
+      { hour: '', time: '当前', requests: 0, success: 0, tokens: 0 },
+    ]
+  }, [timeRange])
+
   const requestChartSummary = useMemo(() => chartData.reduce((acc: { requests: number; tokens: number }, item: any) => {
     acc.requests += item.requests || 0
     acc.tokens += item.tokens || 0
@@ -159,12 +181,13 @@ export default function DashboardPage() {
   const successCount = effectiveData?.success_count ?? Math.round((effectiveData?.request_count ?? requestChartSummary.requests) * (effectiveData?.success_rate || 0))
   const failureCount = effectiveData?.failure_count ?? Math.max((effectiveData?.request_count ?? requestChartSummary.requests) - successCount, 0)
 
-  const timeRangeLabel = timeRange === '1d' ? '24h' : timeRange === '3d' ? '3天' : '7天'
+  const timeRangeLabel = timeRange === '1d' ? '24h' : timeRange === '3d' ? '3天' : timeRange === '7d' ? '7天' : '30天'
 
   const modelData = (effectiveData?.model_distribution || []).map((item: any) => ({
     name: item.model_code,
     value: item.count,
   }))
+  const emptyModelChartData = [{ modelCode: '暂无记录', value: 0 }]
   const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316']
 
   return (
@@ -191,6 +214,7 @@ export default function DashboardPage() {
             <SelectItem value="1d">1 天</SelectItem>
             <SelectItem value="3d">3 天</SelectItem>
             <SelectItem value="7d">7 天</SelectItem>
+            <SelectItem value="30d">30 天</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -221,7 +245,7 @@ export default function DashboardPage() {
                     ))}
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : timeRange === '30d' ? 200 : 80} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -234,13 +258,13 @@ export default function DashboardPage() {
                      formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_requests', '')]}
                   />
                   {keyNames.map((keyName: any, idx: number) => (
-                    <Area key={idx} type="monotone" dataKey={keyName + '_requests'} stackId="request" stroke={keyColors[idx % keyColors.length]} strokeWidth={2} fillOpacity={1} fill={`url(#colorKey${idx})`} name={keyName} />
+                    <Area key={idx} type="monotone" dataKey={keyName + '_requests'} stroke={keyColors[idx % keyColors.length]} strokeWidth={2} fillOpacity={1} fill={`url(#colorKey${idx})`} name={keyName} />
                   ))}
                 </AreaChart>
               </ResponsiveContainer>
-            ) : chartData.length > 0 ? (
+            ) : (
               <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <AreaChart data={chartData.length > 0 ? chartData : emptyTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -248,7 +272,7 @@ export default function DashboardPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : timeRange === '30d' ? 200 : 80} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -262,10 +286,6 @@ export default function DashboardPage() {
                   <Area type="monotone" dataKey="requests" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorRequests)" name="请求数" />
                 </AreaChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                暂无趋势数据
-              </div>
             )}
           </CardContent>
         </Card>
@@ -279,7 +299,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={unifiedTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : timeRange === '30d' ? 200 : 80} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -296,11 +316,11 @@ export default function DashboardPage() {
                   ))}
                 </BarChart>
               </ResponsiveContainer>
-            ) : chartData.length > 0 ? (
+            ) : (
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={chartData.length > 0 ? chartData : emptyTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : 40} />
+                   <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} minTickGap={timeRange === '1d' ? 24 : timeRange === '30d' ? 200 : 80} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ 
@@ -311,15 +331,11 @@ export default function DashboardPage() {
                     labelStyle={{ color: 'var(--foreground)' }}
                      labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
                      formatter={(value: number) => [value.toLocaleString(), 'Token']}
-                  />
-                   <Bar dataKey="tokens" fill="#8b5cf6" name="Token" radius={[4, 4, 0, 0]} />
-                 </BarChart>
-               </ResponsiveContainer>
-             ) : (
-              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                暂无 Token 数据
-              </div>
-            )}
+                   />
+                    <Bar dataKey="tokens" fill="#8b5cf6" name="Token" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
           </CardContent>
         </Card>
       </div>
@@ -377,9 +393,23 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
-                暂无模型数据
-              </div>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={emptyModelChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="modelCode" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} angle={-45} textAnchor="end" height={60} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} domain={[0, 1]} />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'var(--foreground)' }}
+                    formatter={() => ['0', '请求数']}
+                  />
+                  <Bar dataKey="value" fill="#cbd5e1" name="请求数" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
