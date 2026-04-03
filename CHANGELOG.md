@@ -21,6 +21,18 @@
 - Refactor: 代码重构
 - Reverted: 回滚操作
 
+## 2026/04/03
+
+- Added: 网关新增统一错误处理 handleProxyError 方法，根据错误类型返回不同状态码和错误信息。
+- Added: 请求日志新增 key_name、prompt_tokens、completion_tokens、total_tokens、request_summary 字段。
+- Fixed: 日志列表查询移除 TraceID 和 ProviderID 筛选条件，新增 TimeRange 快捷筛选（1h/6h/1d/3d/7d），优化查询性能。
+- Fixed: 仪表盘筛选无使用记录 Key 时显示空图表而非"暂无数据"文案，提升用户体验。
+- Changed: 日志页面筛选器改为下拉选择（API Key、模型），时间筛选改为快捷时间范围下拉。
+- Changed: 日志表格新增 Key、请求内容、Token 列，移除了 TraceID 列。
+- Changed: 按钮尺寸默认 h-11 px-6 text-base，secondary 按钮增加边框和阴影悬停效果。
+- Changed: 开发环境 API 地址改为 https://www.rookiefish.com/localaihub-api。
+- Changed: 全局字号调整为 16px。
+
 ## 2026/04/02
 
 - Added: 网关补齐 Gemini 真实转发与 Anthropic 流式透传能力，支持 `generateContent` / `streamGenerateContent`、模型列表、Provider 探测与健康检查，并统一补强 TLS 校验、认证失败审计、请求日志和 Token 统计。
@@ -90,6 +102,16 @@
 - Removed: 移除统计分析模块，删除前端 analytics 页面、侧边栏入口、后端 analytics handler 及相关 API（与仪表盘功能重复）。
 - Fixed: 修复 Go 后端重复导入包的编译错误（healthcheck service）。
 - Fixed: 删除 gateway_repository.go 中重复声明的方法（CountSuccessRequests、AvgLatency、SumTokens 带参数版本冲突）。
+
+- Added: 网关新增统一错误处理 handleProxyError 方法，根据错误类型返回不同状态码和错误信息。
+- Added: 请求日志新增 key_name、prompt_tokens、completion_tokens、total_tokens、request_summary 字段。
+- Fixed: 日志列表查询移除 TraceID 和 ProviderID 筛选条件，新增 TimeRange 快捷筛选（1h/6h/1d/3d/7d），优化查询性能。
+- Fixed: 仪表盘筛选无使用记录 Key 时显示空图表而非"暂无数据"文案，提升用户体验。
+- Changed: 日志页面筛选器改为下拉选择（API Key、模型），时间筛选改为快捷时间范围下拉。
+- Changed: 日志表格新增 Key、请求内容、Token 列，移除了 TraceID 列。
+- Changed: 按钮尺寸默认 h-11 px-6 text-base，secondary 按钮增加边框和阴影悬停效果。
+- Changed: 开发环境 API 地址改为 https://www.rookiefish.com/localaihub-api。
+- Changed: 全局字号调整为 16px。
 
 ## 2026/03/31
 
