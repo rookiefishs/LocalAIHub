@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,19 @@ import (
 	"localaihub/localaihub_go/internal/pkg/logger"
 	"localaihub/localaihub_go/internal/pkg/netx"
 )
+
+type UpstreamError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *UpstreamError) Error() string {
+	return fmt.Sprintf("upstream error [%d]: %s", e.StatusCode, e.Message)
+}
+
+func (e *UpstreamError) Unwrap() error {
+	return errors.New(e.Message)
+}
 
 type OpenAIChatCompletionRequest struct {
 	Model             string          `json:"model"`
@@ -110,7 +124,7 @@ func (s *GatewayService) authenticateClientWithRequest(ctx context.Context, auth
 	apiKey := bearerOrRawKey(authHeader)
 	if apiKey == "" {
 		s.logAuthFailure(ctx, nil, "missing_api_key", ip, userAgent)
-		return nil, fmt.Errorf("missing api key")
+		return nil, fmt.Errorf("missing api key (缺少API Key)")
 	}
 	hash := sha256.Sum256([]byte(apiKey))
 	hashString := hex.EncodeToString(hash[:])
@@ -123,19 +137,19 @@ func (s *GatewayService) authenticateClientWithRequest(ctx context.Context, auth
 	logger.Log.Debug().Interface("client", client).Msg("client lookup result")
 	if client == nil {
 		s.logAuthFailure(ctx, nil, "invalid_client_key", ip, userAgent)
-		return nil, fmt.Errorf("invalid client key")
+		return nil, fmt.Errorf("invalid client key (无效的API Key)")
 	}
 	if client.Status != "active" {
 		s.logAuthFailure(ctx, client, "client_disabled", ip, userAgent)
-		return nil, fmt.Errorf("invalid client key")
+		return nil, fmt.Errorf("invalid client key (无效的API Key)")
 	}
 	if client.ExpiresAt != nil && client.ExpiresAt.Before(time.Now().UTC()) {
 		s.logAuthFailure(ctx, client, "client_key_expired", ip, userAgent)
-		return nil, fmt.Errorf("client key expired")
+		return nil, fmt.Errorf("client key expired (API Key已过期)")
 	}
 	if client.QuotaDisabledAt != nil {
 		s.logAuthFailure(ctx, client, "quota_disabled", ip, userAgent)
-		return nil, fmt.Errorf("api key disabled due to quota exceeded")
+		return nil, fmt.Errorf("api key disabled due to quota exceeded (API Key因配额超限被禁用)")
 	}
 	if err := s.checkAndEnforceQuota(ctx, client); err != nil {
 		s.logAuthFailure(ctx, client, "quota_exceeded", ip, userAgent)
@@ -150,20 +164,23 @@ func (s *GatewayService) authenticateClientWithRequest(ctx context.Context, auth
 func (s *GatewayService) AuthenticateClientForTest(ctx context.Context, authHeader string) (*repository.GatewayClient, error) {
 	apiKey := bearerOrRawKey(authHeader)
 	if apiKey == "" {
-		return nil, fmt.Errorf("missing api key")
+		return nil, fmt.Errorf("missing api key (缺少API Key)")
 	}
 	hash := sha256.Sum256([]byte(apiKey))
 	hashString := hex.EncodeToString(hash[:])
 	client, err := s.repo.GetClientByHash(ctx, hashString)
 	if err != nil {
 		logger.Log.Error().Err(err).Str("hash", hashString).Msg("failed to get client by hash for test")
-		return nil, err
+		return nil, fmt.Errorf("invalid client key (无效的API Key)")
 	}
 	if client == nil {
-		return nil, fmt.Errorf("invalid client key")
+		return nil, fmt.Errorf("invalid client key (无效的API Key)")
+	}
+	if client.Status != "active" {
+		return nil, fmt.Errorf("invalid client key (API Key已被禁用)")
 	}
 	if client.ExpiresAt != nil && client.ExpiresAt.Before(time.Now().UTC()) {
-		return nil, fmt.Errorf("client key expired")
+		return nil, fmt.Errorf("client key expired (API Key已过期)")
 	}
 	if err := s.repo.TouchClientLastUsed(ctx, client.ID); err != nil {
 		logger.Log.Error().Err(err).Int64("client_id", client.ID).Msg("failed to touch client last used for test")
@@ -268,6 +285,8 @@ func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *reposit
 	}
 	logger.Log.Debug().Str("method", method).Str("path", path).Str("target_url", requestURL).Str("auth_type", route.AuthType).Str("upstream_model", route.UpstreamModelName).Msg("transparent proxy forwarding")
 
+	rawBody = replaceModelInBody(rawBody, route.UpstreamModelName)
+
 	upstreamReq, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(rawBody))
 	if err != nil {
 		return nil, err
@@ -319,13 +338,21 @@ func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *reposit
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
+		upstreamErrMsg := parseUpstreamError(body)
 		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, resp.Status); reportErr != nil {
 			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key result for proxy upstream failure")
 		}
 		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, resp.Status); registerErr != nil {
 			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route failure for upstream status")
 		}
-		s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, false, body, nil, nil)
+		logger.Log.Error().
+			Int("status_code", resp.StatusCode).
+			Str("upstream_error", upstreamErrMsg).
+			Str("model_code", route.ModelCode).
+			Str("provider_url", route.BaseURL).
+			Msg("upstream request failed")
+		s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, false, body, nil, &upstreamErrMsg)
+		return nil, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
 	} else {
 		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
 			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key result for proxy success")
@@ -464,20 +491,28 @@ func (s *GatewayService) ForwardOpenAIResponses(ctx context.Context, client *rep
 		return nil, stream, http.StatusBadGateway, err
 	}
 	if resp.StatusCode >= 400 {
+		upstreamErrMsg := parseUpstreamError(responseBody)
 		if message, ok := mapped["error"].(map[string]any); ok {
 			if msg, ok := message["message"].(string); ok {
+				upstreamErrMsg = msg
 				fallbackResult, fallbackErr := s.forwardResponsesViaChatFallback(ctx, client, raw, msg)
 				if fallbackErr == nil {
 					return fallbackResult, stream, http.StatusOK, nil
 				}
-				return nil, stream, resp.StatusCode, fmt.Errorf(msg)
+				return nil, stream, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
 			}
 		}
+		logger.Log.Error().
+			Int("status_code", resp.StatusCode).
+			Str("upstream_error", upstreamErrMsg).
+			Str("model_code", route.ModelCode).
+			Str("provider_url", route.BaseURL).
+			Msg("openai responses upstream request failed")
 		fallbackResult, fallbackErr := s.forwardResponsesViaChatFallback(ctx, client, raw, fmt.Sprintf("upstream error: %d", resp.StatusCode))
 		if fallbackErr == nil {
 			return fallbackResult, stream, http.StatusOK, nil
 		}
-		return nil, stream, resp.StatusCode, fmt.Errorf("upstream error: %d", resp.StatusCode)
+		return nil, stream, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
 	}
 	return mapped, stream, resp.StatusCode, nil
 }
@@ -784,13 +819,20 @@ func (s *GatewayService) ForwardAnthropicMessages(ctx context.Context, client *r
 	}
 
 	if resp.StatusCode >= 400 {
+		upstreamErrMsg := parseUpstreamError(responseBody)
 		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, resp.Status); reportErr != nil {
 			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report anthropic upstream error")
 		}
 		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, resp.Status); registerErr != nil {
 			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register anthropic upstream status failure")
 		}
-		return nil, resp.StatusCode, fmt.Errorf("anthropic upstream error: %d", resp.StatusCode)
+		logger.Log.Error().
+			Int("status_code", resp.StatusCode).
+			Str("upstream_error", upstreamErrMsg).
+			Str("model_code", route.ModelCode).
+			Str("provider_url", route.BaseURL).
+			Msg("anthropic upstream request failed")
+		return nil, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
 	}
 
 	if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
@@ -908,14 +950,21 @@ func (s *GatewayService) ForwardGeminiGenerateContent(ctx context.Context, clien
 		return nil, http.StatusBadGateway, err
 	}
 	if resp.StatusCode >= 400 {
+		upstreamErrMsg := parseUpstreamError(responseBody)
 		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, resp.Status); reportErr != nil {
 			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report gemini upstream error")
 		}
 		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, resp.Status); registerErr != nil {
 			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register gemini upstream failure status")
 		}
-		s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, false, responseBody, stringPtr(errorCodeForStatus(resp.StatusCode)), stringPtr(fmt.Sprintf("gemini upstream error: %d", resp.StatusCode)), "gemini")
-		return nil, resp.StatusCode, fmt.Errorf("gemini upstream error: %d", resp.StatusCode)
+		logger.Log.Error().
+			Int("status_code", resp.StatusCode).
+			Str("upstream_error", upstreamErrMsg).
+			Str("model_code", route.ModelCode).
+			Str("provider_url", route.BaseURL).
+			Msg("gemini upstream request failed")
+		s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, false, responseBody, stringPtr(errorCodeForStatus(resp.StatusCode)), &upstreamErrMsg, "gemini")
+		return nil, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
 	}
 	if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
 		logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report gemini success")
@@ -1108,10 +1157,20 @@ func (s *GatewayService) forwardToOpenAIProvider(ctx context.Context, route *rep
 }
 
 func (s *GatewayService) logGatewayRequest(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, req OpenAIChatCompletionRequest, respBody map[string]any, statusCode *int, success bool, latency *int, errorCode, errorMessage *string) {
+	var requestMessages []string
+	for _, msg := range req.Messages {
+		if msg.Role == "user" || msg.Role == "system" {
+			content, _ := msg.Content.(string)
+			if len(content) > 500 {
+				content = content[:500] + "..."
+			}
+			requestMessages = append(requestMessages, fmt.Sprintf("[%s] %s", msg.Role, content))
+		}
+	}
 	requestSummary, _ := json.Marshal(map[string]any{
-		"message_count": len(req.Messages),
-		"stream":        req.Stream,
-		"model":         req.Model,
+		"messages": requestMessages,
+		"stream":   req.Stream,
+		"model":    req.Model,
 	})
 	var responseSummary json.RawMessage
 	var promptTokens, completionTokens, totalTokens *int
@@ -1380,4 +1439,49 @@ func parseTokensFromSSE(body []byte, protocol string, promptTokens, completionTo
 			parseTokensFromUsage(lastUsage, promptTokens, completionTokens, totalTokens)
 		}
 	}
+}
+
+func replaceModelInBody(body []byte, upstreamModelName string) []byte {
+	if len(body) == 0 || upstreamModelName == "" {
+		return body
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+	if model, ok := payload["model"].(string); ok && model != "" {
+		payload["model"] = upstreamModelName
+		newBody, err := json.Marshal(payload)
+		if err != nil {
+			return body
+		}
+		return newBody
+	}
+	return body
+}
+
+func parseUpstreamError(body []byte) string {
+	if len(body) == 0 {
+		return "empty response"
+	}
+	var respMap map[string]any
+	if err := json.Unmarshal(body, &respMap); err != nil {
+		return string(body)
+	}
+	if errObj, ok := respMap["error"].(map[string]any); ok {
+		if msg, ok := errObj["message"].(string); ok {
+			return msg
+		}
+		if errSlice, ok := errObj["errors"].([]any); ok && len(errSlice) > 0 {
+			if firstErr, ok := errSlice[0].(map[string]any); ok {
+				if msg, ok := firstErr["message"].(string); ok {
+					return msg
+				}
+			}
+		}
+	}
+	if msg, ok := respMap["message"].(string); ok {
+		return msg
+	}
+	return string(body)
 }

@@ -64,7 +64,6 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get request trend")
 	}
-	trendData = fillHourlyTrendData(trendData, hours)
 	modelDistribution, err := h.gatewayRepo.GetModelDistribution(r.Context(), hours, clientID)
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get model distribution")
@@ -96,7 +95,6 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			logger.Log.Error().Err(err).Msg("failed to get key trend")
 		} else {
-			trendDataByKey = fillHourlyKeyTrendData(trendDataByKey, hours)
 			for _, t := range trendDataByKey {
 				keyTrendData = append(keyTrendData, map[string]any{
 					"hour":     t.Hour,

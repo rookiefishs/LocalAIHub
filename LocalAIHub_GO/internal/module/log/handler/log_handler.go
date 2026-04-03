@@ -9,6 +9,7 @@ import (
 	gatewayrepo "localaihub/localaihub_go/internal/module/gateway/repository"
 	logrepo "localaihub/localaihub_go/internal/module/log/repository"
 	logservice "localaihub/localaihub_go/internal/module/log/service"
+	"localaihub/localaihub_go/internal/pkg/logger"
 	"localaihub/localaihub_go/internal/pkg/response"
 )
 
@@ -17,17 +18,12 @@ type LogHandler struct{ service *logservice.LogService }
 func NewLogHandler(service *logservice.LogService) *LogHandler { return &LogHandler{service: service} }
 
 func (h *LogHandler) ListRequestLogs(w http.ResponseWriter, r *http.Request) {
+	logger.Log.Debug().Str("handler", "ListRequestLogs").Msg("handler called")
 	limit := parseLimit(r, 10)
 	page := parsePage(r, 1)
 	filters := gatewayrepo.RequestLogFilters{Limit: limit, Page: page}
-	if traceID := r.URL.Query().Get("trace_id"); traceID != "" {
-		filters.TraceID = traceID
-	}
 	if clientID := parseInt64Query(r, "client_id"); clientID != nil {
 		filters.ClientID = clientID
-	}
-	if providerID := parseInt64Query(r, "provider_id"); providerID != nil {
-		filters.ProviderID = providerID
 	}
 	if virtualModel := r.URL.Query().Get("virtual_model_code"); virtualModel != "" {
 		filters.VirtualModelCode = virtualModel
@@ -35,11 +31,15 @@ func (h *LogHandler) ListRequestLogs(w http.ResponseWriter, r *http.Request) {
 	if success := parseBoolQuery(r, "success"); success != nil {
 		filters.Success = success
 	}
-	if start := parseTimeQuery(r, "start_time"); start != nil {
-		filters.StartTime = start
-	}
-	if end := parseTimeQuery(r, "end_time"); end != nil {
-		filters.EndTime = end
+	if timeRange := r.URL.Query().Get("time_range"); timeRange != "" {
+		filters.TimeRange = timeRange
+	} else {
+		if start := parseTimeQuery(r, "start_time"); start != nil {
+			filters.StartTime = start
+		}
+		if end := parseTimeQuery(r, "end_time"); end != nil {
+			filters.EndTime = end
+		}
 	}
 	items, total, err := h.service.ListRequestLogs(r.Context(), filters)
 	if err != nil {

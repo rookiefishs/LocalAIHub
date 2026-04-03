@@ -37,11 +37,7 @@ func (h *ProxyHandler) OpenAIChatCompletions(w http.ResponseWriter, r *http.Requ
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": "GW422001"},
-		})
+		h.handleProxyError(w, err)
 		return
 	}
 	writeProxyResponse(w, result)
@@ -61,11 +57,7 @@ func (h *ProxyHandler) OpenAIResponses(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": "GW422001"},
-		})
+		h.handleProxyError(w, err)
 		return
 	}
 	writeProxyResponse(w, result)
@@ -86,11 +78,7 @@ func (h *ProxyHandler) OpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": "GW422001"},
-		})
+		h.handleProxyError(w, err)
 		return
 	}
 	writeProxyResponse(w, result)
@@ -189,13 +177,9 @@ func (h *ProxyHandler) AnthropicMessages(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	result, statusCode, err := h.service.ForwardAnthropicMessages(r.Context(), client, req)
+	result, _, err := h.service.ForwardAnthropicMessages(r.Context(), client, req)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(statusCode)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": gatewayErrorCode(statusCode)},
-		})
+		h.handleProxyError(w, err)
 		return
 	}
 	writeProxyResponse(w, result)
@@ -242,13 +226,9 @@ func (h *ProxyHandler) GeminiGeneratePlaceholder(w http.ResponseWriter, r *http.
 		})
 		return
 	}
-	result, statusCode, err := h.service.ForwardGeminiGenerateContent(r.Context(), client, modelCode, req, stream)
+	result, _, err := h.service.ForwardGeminiGenerateContent(r.Context(), client, modelCode, req, stream)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(statusCode)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{"message": err.Error(), "type": "gateway_error", "code": gatewayErrorCode(statusCode)},
-		})
+		h.handleProxyError(w, err)
 		return
 	}
 	writeProxyResponse(w, result)
@@ -319,4 +299,29 @@ func gatewayErrorCode(statusCode int) string {
 	default:
 		return "GW500001"
 	}
+}
+
+func (h *ProxyHandler) handleProxyError(w http.ResponseWriter, err error) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var statusCode = http.StatusBadGateway
+	var errorType = "gateway_error"
+	var errorCode = "GW422001"
+	var errorMessage = err.Error()
+
+	if ue, ok := err.(*gatewayservice.UpstreamError); ok {
+		statusCode = ue.StatusCode
+		errorType = "upstream_error"
+		errorCode = fmt.Sprintf("GW%d", ue.StatusCode)
+		errorMessage = ue.Message
+	}
+
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{
+			"message": errorMessage,
+			"type":    errorType,
+			"code":    errorCode,
+		},
+	})
 }
