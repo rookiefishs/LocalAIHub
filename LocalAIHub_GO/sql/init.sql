@@ -218,6 +218,8 @@ CREATE TABLE IF NOT EXISTS request_log (
     client_id BIGINT NULL,
     virtual_model_id BIGINT NULL,
     virtual_model_code VARCHAR(128) NULL,
+    requested_model VARCHAR(128) NULL,
+    binding_id BIGINT NULL,
     provider_id BIGINT NULL,
     provider_key_id BIGINT NULL,
     upstream_model_name VARCHAR(128) NULL,
@@ -237,10 +239,13 @@ CREATE TABLE IF NOT EXISTS request_log (
     KEY idx_request_log_created_at (created_at),
     KEY idx_request_log_client_created_at (client_id, created_at),
     KEY idx_request_log_virtual_model_created_at (virtual_model_code, created_at),
+    KEY idx_request_log_requested_model_created_at (requested_model, created_at),
+    KEY idx_request_log_binding_created_at (binding_id, created_at),
     KEY idx_request_log_provider_created_at (provider_id, created_at),
     KEY idx_request_log_success_created_at (success, created_at),
     CONSTRAINT fk_request_log_client FOREIGN KEY (client_id) REFERENCES api_client(id) ON DELETE SET NULL,
     CONSTRAINT fk_request_log_virtual_model FOREIGN KEY (virtual_model_id) REFERENCES virtual_model(id) ON DELETE SET NULL,
+    CONSTRAINT fk_request_log_binding FOREIGN KEY (binding_id) REFERENCES virtual_model_binding(id) ON DELETE SET NULL,
     CONSTRAINT fk_request_log_provider FOREIGN KEY (provider_id) REFERENCES provider(id) ON DELETE SET NULL,
     CONSTRAINT fk_request_log_provider_key FOREIGN KEY (provider_key_id) REFERENCES provider_key(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -33,7 +33,10 @@ func (h *ProxyHandler) OpenAIChatCompletions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	body, _ := io.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to read request body")
+	}
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
@@ -53,7 +56,10 @@ func (h *ProxyHandler) OpenAIResponses(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	body, _ := io.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to read request body")
+	}
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
@@ -74,7 +80,10 @@ func (h *ProxyHandler) OpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	body, _ := io.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to read request body")
+	}
 	logger.Log.Debug().Int("body_size", len(body)).Msg("proxy request body received")
 	result, err := h.service.ProxyOpenAIRequest(r.Context(), client, r.Method, r.URL.Path, r.URL.RawQuery, body, r.Header)
 	if err != nil {
