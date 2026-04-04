@@ -12,6 +12,7 @@ import { StatCard } from '@/components/stat-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
 import { Modal } from '@/components/ui/modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -46,7 +47,8 @@ export default function UpstreamsPage() {
   const [pendingDeleteProviderKey, setPendingDeleteProviderKey] = useState<any | null>(null)
   const [form, setForm] = useState(initialProviderForm)
   const [keyForm, setKeyForm] = useState({ secret: '', priority: 1, remark: '' })
-  const [loadingStatus, setLoadingStatus] = useState<number | null>(null)
+  const [loadingStatus, setLoadingStatus] = useState<Set<number>>(new Set())
+  const [loadingKeyStatus, setLoadingKeyStatus] = useState<Set<number>>(new Set())
   const [loadingSubmit, setLoadingSubmit] = useState(false)
   const [loadingKeySubmit, setLoadingKeySubmit] = useState(false)
   const [testingProviders, setTestingProviders] = useState<Set<number>>(new Set())
@@ -318,7 +320,7 @@ export default function UpstreamsPage() {
                         <Button variant="secondary" size="sm" loading={testingProviders.has(item.id)} onClick={() => { setTestingProviders(prev => new Set(prev).add(item.id)); api.testProvider(item.id).then((result: any) => { if (result?.success) { showSuccess(`检测完成，鉴权为 ${result?.auth_type || 'x_api_key'}`) } else { showError(result?.message || '检测失败') } return load() }).catch((err) => showError(err.message)).finally(() => setTestingProviders(prev => { const next = new Set(prev); next.delete(item.id); return next })) }}>测试</Button>
                         <Button variant="secondary" size="sm" onClick={() => { loadProviderKeys(item.id).catch((err) => setMessage(err.message)); setProviderKeyModalOpen(true) }}>Keys</Button>
                         <Button variant="secondary" size="sm" onClick={() => startEdit(item)}>编辑</Button>
-                        <Button variant="secondary" size="sm" loading={loadingStatus === item.id} onClick={() => { setLoadingStatus(item.id); api.updateProviderStatus(item.id, !item.enabled).then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(null)) }} style={{ color: item.enabled ? 'var(--danger)' : 'var(--success)' }}>{item.enabled ? '禁用' : '启用'}</Button>
+                        <Button variant="secondary" size="sm" loading={loadingStatus.has(item.id)} onClick={() => { setLoadingStatus(prev => new Set(prev).add(item.id)); api.updateProviderStatus(item.id, !item.enabled).then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(prev => { const next = new Set(prev); next.delete(item.id); return next })) }} style={{ color: item.enabled ? 'var(--danger)' : 'var(--success)' }}>{item.enabled ? '禁用' : '启用'}</Button>
                         <Button variant="destructive" size="sm" onClick={() => setPendingDeleteProvider(item)}>删除</Button>
                       </div>
                     </TableCell>
@@ -356,7 +358,15 @@ export default function UpstreamsPage() {
           <div className="flex items-center gap-4">
             <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>鉴权</label>
             <div className="flex-1 space-y-2">
-              <Input value={editingProviderId ? form.auth_type || 'x_api_key' : '自动识别（默认 x_api_key，失败后尝试 bearer）'} readOnly />
+              <Select value={form.auth_type} onValueChange={(value) => setForm({ ...form, auth_type: value })}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="x_api_key">x_api_key</SelectItem>
+                  <SelectItem value="bearer">bearer</SelectItem>
+                </SelectContent>
+              </Select>
               <Input type="number" placeholder="超时(ms)" value={form.timeout_ms} onChange={(e) => setForm({ ...form, timeout_ms: Number(e.target.value) })} />
             </div>
           </div>
@@ -439,7 +449,7 @@ export default function UpstreamsPage() {
                   <div className="flex items-center gap-2">
                     <Button variant="secondary" size="sm" loading={testingKeys.has(item.id)} onClick={() => { setTestingKeys(prev => new Set(prev).add(item.id)); api.testProviderKey(selectedProviderId!, item.id).then((res: any) => { if (res?.success) { showSuccess('连接成功') } else { showError(`连接失败: ${res?.error || '未知错误'}`) } return loadProviderKeys(selectedProviderId!) }).catch((err) => showError(err.message)).finally(() => setTestingKeys(prev => { const next = new Set(prev); next.delete(item.id); return next })) }}>测试</Button>
                     <Button variant="secondary" size="sm" onClick={() => { setEditingKeyId(item.id); setEditingKeyForm({ secret: item.plain_key || '', priority: item.priority, remark: item.remark || '' }) }}><FiEdit2 className="h-3 w-3" /></Button>
-                    <Button variant="secondary" size="sm" onClick={() => api.updateProviderKeyStatus(selectedProviderId!, item.id, item.status === 'enabled' ? 'disabled' : 'enabled').then(() => { showSuccess('状态更新成功'); return loadProviderKeys(selectedProviderId!) }).catch((err) => showError(err.message))}>{item.status === 'enabled' ? '禁用' : '启用'}</Button>
+                    <Button variant="secondary" size="sm" loading={loadingKeyStatus.has(item.id)} onClick={() => { setLoadingKeyStatus(prev => new Set(prev).add(item.id)); api.updateProviderKeyStatus(selectedProviderId!, item.id, item.status === 'enabled' ? 'disabled' : 'enabled').then(() => { showSuccess('状态更新成功'); return loadProviderKeys(selectedProviderId!) }).catch((err) => showError(err.message)).finally(() => setLoadingKeyStatus(prev => { const next = new Set(prev); next.delete(item.id); return next })) }}>{item.status === 'enabled' ? '禁用' : '启用'}</Button>
                     <Button variant="destructive" size="sm" onClick={() => setPendingDeleteProviderKey(item)}><FiTrash2 className="h-3 w-3" /></Button>
                   </div>
                 </motion.div>

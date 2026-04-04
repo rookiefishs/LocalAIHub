@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { Modal } from '@/components/ui/modal'
+import { Switch } from '@/components/ui/switch'
 import { PaginationBar } from '@/components/pagination-bar'
 import { useToast } from '@/components/ui/toast'
 import { useRefresh } from '@/components/refresh-context'
@@ -38,7 +39,7 @@ interface Binding {
   upstream_model_name: string
   priority: number
   enabled: boolean
-  is_same_name: boolean
+  is_same_name?: boolean
   provider_key_id?: number
 }
 
@@ -47,7 +48,6 @@ const initialBindingForm = {
   provider_key_id: 0,
   upstream_model_name: '',
   priority: 1,
-  enabled: true,
   is_same_name: false,
 }
 
@@ -67,6 +67,7 @@ export default function ModelsPage() {
   const [editingBinding, setEditingBinding] = useState<Binding | null>(null)
   const [form, setForm] = useState(initialModelForm)
   const [bindingForm, setBindingForm] = useState(initialBindingForm)
+  const [loadingData, setLoadingData] = useState(true)
   const [loadingSubmit, setLoadingSubmit] = useState(false)
   const [loadingBinding, setLoadingBinding] = useState(false)
   const [testingBindings, setTestingBindings] = useState<Set<number>>(new Set())
@@ -80,13 +81,18 @@ export default function ModelsPage() {
   const { registerRefresh } = useRefresh()
 
   async function load() {
-    const [modelsData, providersData] = await Promise.all([
-      api.models(`page=${page}&page_size=${pageSize}`),
-      api.providers()
-    ])
-    setModels(modelsData.items || [])
-    setTotal(modelsData.total || 0)
-    setProviders(providersData.items || [])
+    setLoadingData(true)
+    try {
+      const [modelsData, providersData] = await Promise.all([
+        api.models(`page=${page}&page_size=${pageSize}`),
+        api.providers()
+      ])
+      setModels(modelsData.items || [])
+      setTotal(modelsData.total || 0)
+      setProviders(providersData.items || [])
+    } finally {
+      setLoadingData(false)
+    }
   }
 
   async function loadBindings(id: number) {
@@ -162,10 +168,10 @@ export default function ModelsPage() {
     try {
       await api.createModelBinding(selectedModelId, {
         provider_id: Number(bindingForm.provider_id),
-        provider_key_id: bindingForm.provider_key_id || null,
+        provider_key_id: bindingForm.provider_key_id || undefined,
         upstream_model_name: bindingForm.upstream_model_name,
         priority: bindings.length + 1,
-        enabled: bindingForm.enabled,
+        enabled: true,
         is_same_name: bindingForm.is_same_name,
       })
       showSuccess('绑定成功')
@@ -185,7 +191,7 @@ export default function ModelsPage() {
     try {
       await api.updateModelBinding(selectedModelId, binding.id, {
         provider_id: binding.provider_id,
-        provider_key_id: binding.provider_key_id || null,
+        provider_key_id: binding.provider_key_id || undefined,
         upstream_model_name: binding.upstream_model_name,
         priority: binding.priority,
         enabled: binding.enabled,
@@ -231,7 +237,7 @@ export default function ModelsPage() {
     try {
       await Promise.all(items.map((binding, index) => api.updateModelBinding(selectedModelId, binding.id, {
         provider_id: binding.provider_id,
-        provider_key_id: binding.provider_key_id || null,
+        provider_key_id: binding.provider_key_id || undefined,
         upstream_model_name: binding.upstream_model_name,
         priority: index + 1,
         enabled: binding.enabled,
@@ -289,7 +295,14 @@ export default function ModelsPage() {
         </div>
         <CardContent className="p-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {models.length === 0 ? (
+            {loadingData ? (
+              <div className="col-span-full h-32 flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                  加载中...
+                </div>
+              </div>
+            ) : models.length === 0 ? (
               <div className="col-span-full h-32 flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>暂无数据</div>
             ) : models.map((item) => (
               <Card key={item.id}>
@@ -512,21 +525,10 @@ export default function ModelsPage() {
             />
           </div>
           <div className="flex items-center gap-4">
-            <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>启用</label>
-            <input
-              type="checkbox"
-              checked={bindingForm.enabled}
-              onChange={(e) => setBindingForm({ ...bindingForm, enabled: e.target.checked })}
-              className="h-4 w-4"
-            />
-          </div>
-          <div className="flex items-center gap-4">
             <label className="w-16 text-sm" style={{ color: 'var(--foreground)' }}>同名</label>
-            <input
-              type="checkbox"
+            <Switch
               checked={bindingForm.is_same_name}
               onChange={(e) => setBindingForm({ ...bindingForm, is_same_name: e.target.checked })}
-              className="h-4 w-4"
             />
           </div>
         </div>

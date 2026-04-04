@@ -30,7 +30,7 @@ interface Provider {
   id: number
   name: string
   base_url: string
-  health_status: string
+  health_status?: string
   enabled: boolean
   auth_type: string
 }
@@ -139,7 +139,7 @@ export default function WizardPage() {
         name: newProvider.name,
         base_url: newProvider.base_url,
         auth_type: newProvider.auth_type,
-        newKey: newProvider.newKey,
+        new_key: newProvider.newKey,
         remark: newProvider.remark,
         enabled: true,
         provider_type: 'proxy',
