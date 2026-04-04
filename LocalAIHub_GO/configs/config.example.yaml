@@ -5,12 +5,13 @@ server:
 security:
   admin_session_secret: change-me
   encryption_key: change-me-too
-  admin_password_plain: change-me-admin-password
+  # admin_password_hash: 使用 bcrypt 加密后的密码，推荐使用 SQL 中的默认值
+  # 默认密码: admin / admin123 (bcrypt hash: $2a$10$7sM8J6wWmE0ax4qP1fM4HOdM3V7T3rP3r0nJQJ0WQ0l8KjYV0t5Nu)
   allow_insecure_tls: false
 
 database:
   driver: mysql
-  dsn: root:admin123@tcp(127.0.0.1:3306)/localaihub?charset=utf8mb4&parseTime=True&loc=UTC
+  dsn: root:admin123@tcp(127.0.0.1:3306)/localaihub?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai
   init_sql_path: sql/init.sql
   max_open_conns: 10
   min_idle_conns: 2

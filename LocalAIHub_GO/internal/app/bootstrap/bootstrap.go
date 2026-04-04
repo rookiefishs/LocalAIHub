@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"localaihub/localaihub_go/internal/app/router"
 	"localaihub/localaihub_go/internal/config"
 	"localaihub/localaihub_go/internal/database"
@@ -61,19 +59,8 @@ func New() (*App, error) {
 	}
 
 	passwordHash := cfg.Security.AdminPasswordHash
-	if cfg.Security.AdminPasswordPlain != "" {
-		hashed, hashErr := bcrypt.GenerateFromPassword([]byte(cfg.Security.AdminPasswordPlain), bcrypt.DefaultCost)
-		if hashErr != nil {
-			return nil, fmt.Errorf("generate admin password hash from plain config: %w", hashErr)
-		}
-		passwordHash = string(hashed)
-	}
 	if passwordHash == "" {
-		hashed, hashErr := bcrypt.GenerateFromPassword([]byte("yu3209605851"), bcrypt.DefaultCost)
-		if hashErr != nil {
-			return nil, fmt.Errorf("generate default admin password hash: %w", hashErr)
-		}
-		passwordHash = string(hashed)
+		return nil, fmt.Errorf("admin password is required: please set security.admin_password_hash in config")
 	}
 
 	adminRepo := authrepo.NewAdminRepository(db)

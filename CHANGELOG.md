@@ -21,6 +21,10 @@
 - Refactor: 代码重构
 - Reverted: 回滚操作
 
+## 2026/04/04
+
+- Security: 管理后台登录新增 Refresh Token 刷新机制，前端在访问令牌过期后自动续签；后端配置移除明文管理员密码项，要求通过 `security.admin_password_hash` 提供哈希密码。
+
 ## 2026/04/03
 
 - Added: 网关新增统一错误处理 handleProxyError 方法，根据错误类型返回不同状态码和错误信息。

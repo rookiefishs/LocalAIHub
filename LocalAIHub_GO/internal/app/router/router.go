@@ -48,6 +48,7 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 
 	mux.HandleFunc("GET /healthz", healthHandler.Healthz)
 	mux.HandleFunc("POST /admin/api/v1/auth/login", handlers.Auth.Login)
+	mux.HandleFunc("POST /admin/api/v1/auth/refresh", handlers.Auth.RefreshToken)
 	mux.Handle("GET /admin/api/v1/auth/me", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Auth.Me)))
 	mux.Handle("GET /admin/api/v1/dashboard/overview", adminAuthMiddleware(authService, http.HandlerFunc(handlers.System.DashboardOverview)))
 	mux.Handle("GET /admin/api/v1/providers", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Providers.List)))
@@ -58,7 +59,6 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 	mux.Handle("POST /admin/api/v1/client-keys", adminAuthMiddleware(authService, http.HandlerFunc(handlers.ClientKey.Create)))
 	mux.Handle("GET /admin/api/v1/routes", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Route.List)))
 	mux.Handle("GET /admin/api/v1/logs/requests", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ListRequestLogs)))
-	mux.Handle("GET /admin/api/v1/logs/audit", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ListAuditLogs)))
 	mux.Handle("GET /admin/api/v1/audit-logs", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ListAuditLogs)))
 	mux.Handle("GET /admin/api/v1/audit-logs/export", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Logs.ExportAuditLogs)))
 	mux.Handle("GET /admin/api/v1/logs/requests/", adminAuthMiddleware(authService, dynamicLogHandler(handlers.Logs)))

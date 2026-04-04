@@ -41,7 +41,8 @@ func (h *AdminAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			"id":       session.AdminID,
 			"username": session.Username,
 		},
-		"token": session.Token,
+		"token":         session.Token,
+		"refresh_token": session.RefreshToken,
 	})
 }
 
@@ -59,5 +60,32 @@ func (h *AdminAuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 			"username": admin.Username,
 			"status":   admin.Status,
 		},
+	})
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+func (h *AdminAuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid parameters")
+		return
+	}
+
+	session, err := h.authService.RefreshToken(req.RefreshToken)
+	if err != nil {
+		response.AdminError(w, r, http.StatusUnauthorized, 401102, "invalid or expired refresh token")
+		return
+	}
+
+	response.AdminSuccess(w, r, map[string]any{
+		"user": map[string]any{
+			"id":       session.AdminID,
+			"username": session.Username,
+		},
+		"token":         session.Token,
+		"refresh_token": session.RefreshToken,
 	})
 }

@@ -19,9 +19,10 @@ var (
 )
 
 type Session struct {
-	Token    string
-	AdminID  int64
-	Username string
+	Token        string
+	RefreshToken string
+	AdminID      int64
+	Username     string
 }
 
 type AuthService struct {
@@ -73,6 +74,11 @@ func (s *AuthService) Login(ctx context.Context, username, password, ip, userAge
 		return nil, err
 	}
 
+	refreshToken, err := s.generateRefreshToken(admin.ID, admin.Username)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.repo.UpdateLastLogin(ctx, admin.ID, ip); err != nil {
 		logger.Log.Error().Err(err).Int64("admin_id", admin.ID).Msg("failed to update last login")
 	}
@@ -84,18 +90,68 @@ func (s *AuthService) Login(ctx context.Context, username, password, ip, userAge
 		s.audit.Log(ctx, "login", "admin_user", &adminID, map[string]any{"username": admin.Username, "result": "success", "ip": ip}, ip, userAgent)
 	}
 
-	return &Session{Token: token, AdminID: admin.ID, Username: admin.Username}, nil
+	return &Session{Token: token, RefreshToken: refreshToken, AdminID: admin.ID, Username: admin.Username}, nil
 }
 
 func (s *AuthService) generateToken(adminID int64, username string) (string, error) {
 	claims := jwt.MapClaims{
 		"admin_id":  adminID,
 		"username":  username,
+		"type":      "access",
+		"exp":       time.Now().Add(1 * time.Hour).Unix(),
+		"issued_at": time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.jwtSecret))
+}
+
+func (s *AuthService) generateRefreshToken(adminID int64, username string) (string, error) {
+	claims := jwt.MapClaims{
+		"admin_id":  adminID,
+		"username":  username,
+		"type":      "refresh",
 		"exp":       time.Now().Add(7 * 24 * time.Hour).Unix(),
 		"issued_at": time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+func (s *AuthService) RefreshToken(refreshTokenString string) (*Session, error) {
+	token, err := jwt.Parse(refreshTokenString, func(token *jwt.Token) (any, error) {
+		return []byte(s.jwtSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, ErrUnauthorized
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, ErrUnauthorized
+	}
+
+	tokenType, _ := claims["type"].(string)
+	if tokenType != "refresh" {
+		return nil, ErrUnauthorized
+	}
+
+	adminID, ok := claims["admin_id"].(float64)
+	if !ok {
+		return nil, ErrUnauthorized
+	}
+	username, _ := claims["username"].(string)
+
+	newToken, err := s.generateToken(int64(adminID), username)
+	if err != nil {
+		return nil, err
+	}
+
+	newRefreshToken, err := s.generateRefreshToken(int64(adminID), username)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Session{Token: newToken, RefreshToken: newRefreshToken, AdminID: int64(adminID), Username: username}, nil
 }
 
 func (s *AuthService) Authenticate(tokenString string) (*Session, error) {

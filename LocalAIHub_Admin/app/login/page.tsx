@@ -25,7 +25,7 @@ export default function LoginPage() {
     setError('')
     try {
       const data = await api.login({ username, password })
-      setToken(data.token)
+      setToken(data.token, data.refresh_token)
       router.push('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败')

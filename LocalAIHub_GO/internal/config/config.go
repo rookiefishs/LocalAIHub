@@ -29,7 +29,6 @@ type SecurityConfig struct {
 	AdminSessionSecret string `yaml:"admin_session_secret"`
 	EncryptionKey      string `yaml:"encryption_key"`
 	AdminPasswordHash  string `yaml:"admin_password_hash"`
-	AdminPasswordPlain string `yaml:"admin_password_plain"`
 	AllowInsecureTLS   bool   `yaml:"allow_insecure_tls"`
 }
 
@@ -111,7 +110,6 @@ func overrideFromEnv(cfg *Config) {
 	setString(&cfg.Security.AdminSessionSecret, "LOCALAIHUB_ADMIN_SESSION_SECRET")
 	setString(&cfg.Security.EncryptionKey, "LOCALAIHUB_ENCRYPTION_KEY")
 	setString(&cfg.Security.AdminPasswordHash, "LOCALAIHUB_ADMIN_PASSWORD_HASH")
-	setString(&cfg.Security.AdminPasswordPlain, "LOCALAIHUB_ADMIN_PASSWORD_PLAIN")
 	setBool(&cfg.Security.AllowInsecureTLS, "LOCALAIHUB_ALLOW_INSECURE_TLS")
 	setString(&cfg.Database.Driver, "LOCALAIHUB_DB_DRIVER")
 	setString(&cfg.Database.DSN, "LOCALAIHUB_DB_DSN")
