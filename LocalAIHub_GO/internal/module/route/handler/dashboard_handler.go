@@ -63,6 +63,8 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 	trendData, err := h.gatewayRepo.GetRequestTrend(r.Context(), hours, clientID)
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get request trend")
+	} else {
+		trendData = fillHourlyTrendData(trendData, hours)
 	}
 	modelDistribution, err := h.gatewayRepo.GetModelDistribution(r.Context(), hours, clientID)
 	if err != nil {
@@ -95,6 +97,7 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			logger.Log.Error().Err(err).Msg("failed to get key trend")
 		} else {
+			trendDataByKey = fillHourlyKeyTrendData(trendDataByKey, hours)
 			for _, t := range trendDataByKey {
 				keyTrendData = append(keyTrendData, map[string]any{
 					"hour":     t.Hour,
@@ -139,6 +142,16 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+func trendBucketStepHours(hours int) int {
+	if hours > 720 {
+		return 24
+	}
+	if hours > 168 {
+		return 6
+	}
+	return 1
+}
+
 func fillHourlyTrendData(items []gatewayrepo.HourlyStat, hours int) []gatewayrepo.HourlyStat {
 	if hours <= 0 {
 		return items
@@ -148,10 +161,15 @@ func fillHourlyTrendData(items []gatewayrepo.HourlyStat, hours int) []gatewayrep
 		byHour[item.Hour] = item
 	}
 	loc := time.FixedZone("CST", 8*3600)
-	now := time.Now().UTC().In(loc).Truncate(time.Hour)
-	start := now.Add(time.Duration(-(hours - 1)) * time.Hour)
-	filled := make([]gatewayrepo.HourlyStat, 0, hours)
-	for current := start; !current.After(now); current = current.Add(time.Hour) {
+	stepHours := trendBucketStepHours(hours)
+	now := time.Now().In(loc).Truncate(time.Hour)
+	if stepHours > 1 {
+		now = now.Add(-time.Duration(now.Hour()%stepHours) * time.Hour)
+	}
+	bucketCount := (hours + stepHours - 1) / stepHours
+	start := now.Add(-time.Duration(bucketCount-1) * time.Duration(stepHours) * time.Hour)
+	filled := make([]gatewayrepo.HourlyStat, 0, bucketCount)
+	for current := start; !current.After(now); current = current.Add(time.Duration(stepHours) * time.Hour) {
 		key := current.Format("2006-01-02 15:00")
 		if item, ok := byHour[key]; ok {
 			filled = append(filled, item)
@@ -177,10 +195,15 @@ func fillHourlyKeyTrendData(items []gatewayrepo.KeyTrend, hours int) []gatewayre
 		byKeyHour[item.KeyName+"|"+item.Hour] = item
 	}
 	loc := time.FixedZone("CST", 8*3600)
-	now := time.Now().UTC().In(loc).Truncate(time.Hour)
-	start := now.Add(time.Duration(-(hours - 1)) * time.Hour)
-	filled := make([]gatewayrepo.KeyTrend, 0, hours*len(keyNames))
-	for current := start; !current.After(now); current = current.Add(time.Hour) {
+	stepHours := trendBucketStepHours(hours)
+	now := time.Now().In(loc).Truncate(time.Hour)
+	if stepHours > 1 {
+		now = now.Add(-time.Duration(now.Hour()%stepHours) * time.Hour)
+	}
+	bucketCount := (hours + stepHours - 1) / stepHours
+	start := now.Add(-time.Duration(bucketCount-1) * time.Duration(stepHours) * time.Hour)
+	filled := make([]gatewayrepo.KeyTrend, 0, bucketCount*len(keyNames))
+	for current := start; !current.After(now); current = current.Add(time.Duration(stepHours) * time.Hour) {
 		hourKey := current.Format("2006-01-02 15:00")
 		for _, keyName := range keyNames {
 			lookupKey := keyName + "|" + hourKey

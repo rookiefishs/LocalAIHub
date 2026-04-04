@@ -11,13 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { api } from '@/lib/api'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 import { useRefresh } from '@/components/refresh-context'
-
-interface ClientKey {
-  id: number
-  name: string
-  key_prefix: string
-  status: string
-}
+import type { ClientKey, DashboardData } from '@/lib/types'
 
 function formatTrendLabel(hour: string, timeRange: string) {
   if (!hour) return ''
@@ -31,8 +25,12 @@ function formatTrendLabel(hour: string, timeRange: string) {
   return `${month}-${day} ${timePart}`.trim()
 }
 
+function getMinVisibleBarSize(value: number | null | undefined) {
+  return typeof value === 'number' && value > 0 ? 6 : 0
+}
+
 export default function DashboardPage() {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('1d')
@@ -82,7 +80,7 @@ export default function DashboardPage() {
       loadDashboard()
     }, 30000)
     return () => clearInterval(timer)
-  }, [timeRange, selectedKey])
+  }, [])
 
   const selectedKeyName = selectedKey === 'all' 
     ? '全部' 
@@ -106,11 +104,22 @@ export default function DashboardPage() {
   const keyColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#14b8a6', '#f97316']
 
   const keyTrendData = selectedKey === 'all' && effectiveData?.key_trend ? effectiveData.key_trend : []
-  
+  const keyModelData = selectedKey === 'all' && effectiveData?.key_model_distribution ? effectiveData.key_model_distribution : []
+
   const activeKeyNames = new Set(clientKeys.map(k => k.name))
   const filteredKeyTrendData = keyTrendData.filter((t: any) => activeKeyNames.has(t.key_name))
-  
-  const keyNames = [...new Set(filteredKeyTrendData.map((t: any) => t.key_name).filter((value: any): value is string => Boolean(value)))]
+  const filteredKeyModelData = keyModelData.filter((t: any) => activeKeyNames.has(t.key_name))
+
+  const allKeyNames = [
+    ...new Set([
+      ...keyStatsData.map((item: any) => item.name).filter((value: any): value is string => Boolean(value)),
+      ...filteredKeyTrendData.map((t: any) => t.key_name).filter((value: any): value is string => Boolean(value)),
+      ...filteredKeyModelData.map((t: any) => t.key_name).filter((value: any): value is string => Boolean(value)),
+    ]),
+  ]
+  const keyColorMap = new Map(allKeyNames.map((keyName, idx) => [keyName, keyColors[idx % keyColors.length]]))
+
+  const keyNames = allKeyNames.filter((keyName) => filteredKeyTrendData.some((t: any) => t.key_name === keyName))
   const keyTrendHours: string[] = [...new Set(filteredKeyTrendData.map((t: any) => t.hour).filter((value: any): value is string => Boolean(value)))].sort() as string[]
   const keyTrendBuckets = keyTrendHours.map((hour: string) => ({
     hour,
@@ -127,14 +136,13 @@ export default function DashboardPage() {
     return entry
   })
 
-  const keyModelData = selectedKey === 'all' && effectiveData?.key_model_distribution ? effectiveData.key_model_distribution : []
-  const modelNames = [...new Set(keyModelData.map((t: any) => t.model_code))]
-  const keyModelNames = [...new Set(keyModelData.map((t: any) => t.key_name))]
-  
+  const modelNames = [...new Set(filteredKeyModelData.map((t: any) => t.model_code))]
+  const keyModelNames = allKeyNames.filter((keyName) => filteredKeyModelData.some((t: any) => t.key_name === keyName))
+
   const modelChartData = modelNames.map((modelCode: any) => {
     const entry: any = { modelCode }
     keyModelNames.forEach((keyName: any) => {
-      const item = keyModelData.find((t: any) => t.model_code === modelCode && t.key_name === keyName)
+      const item = filteredKeyModelData.find((t: any) => t.model_code === modelCode && t.key_name === keyName)
       entry[keyName] = item ? item.count : 0
     })
     return entry
@@ -220,11 +228,24 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <StatCard title={`请求数 (${timeRangeLabel})`} value={effectiveData?.request_count ?? '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title={`成功率 (${timeRangeLabel})`} value={effectiveData ? `${Math.round((effectiveData.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title="平均延迟" value={effectiveData?.avg_latency_ms ? `${effectiveData.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title={`Token (${timeRangeLabel})`} value={effectiveData?.total_tokens ? `${(effectiveData.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
-        <StatCard title={`上游 (${timeRangeLabel})`} value={effectiveData?.active_upstream_count ?? '-'} subValue={effectiveData?.active_upstream_count ? "启用" : undefined} icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} href="/dashboard/upstreams" />
+        {loading ? Array.from({ length: 5 }).map((_, index) => (
+          <Card key={index}>
+            <CardContent className="flex h-[92px] items-center justify-center">
+              <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                加载中...
+              </div>
+            </CardContent>
+          </Card>
+        )) : (
+          <>
+            <StatCard title={`请求数 (${timeRangeLabel})`} value={effectiveData?.request_count ?? '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+            <StatCard title={`成功率 (${timeRangeLabel})`} value={effectiveData ? `${Math.round((effectiveData.success_rate || 0) * 100)}%` : '-'} icon={<HiOutlineServerStack className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+            <StatCard title="平均延迟" value={effectiveData?.avg_latency_ms ? `${effectiveData.avg_latency_ms}ms` : '-'} icon={<TbClockHour4 className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+            <StatCard title={`Token (${timeRangeLabel})`} value={effectiveData?.total_tokens ? `${(effectiveData.total_tokens / 1000).toFixed(1)}k` : '-'} icon={<LuActivity className="h-4 w-4 text-slate-400" />} href="/dashboard/logs" />
+            <StatCard title={`上游 (${timeRangeLabel})`} value={effectiveData?.active_upstream_count ?? '-'} subValue={effectiveData?.active_upstream_count ? "启用" : undefined} icon={<HiOutlineGlobeAlt className="h-4 w-4 text-slate-400" />} href="/dashboard/upstreams" />
+          </>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -237,10 +258,10 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={unifiedTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
-                    {keyNames.map((_, idx) => (
-                      <linearGradient key={idx} id={`colorKey${idx}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={keyColors[idx % keyColors.length]} stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor={keyColors[idx % keyColors.length]} stopOpacity={0}/>
+                    {keyNames.map((keyName) => (
+                      <linearGradient key={keyName} id={`colorKey-${keyName}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={keyColorMap.get(keyName) || keyColors[0]} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={keyColorMap.get(keyName) || keyColors[0]} stopOpacity={0}/>
                       </linearGradient>
                     ))}
                   </defs>
@@ -257,8 +278,8 @@ export default function DashboardPage() {
                      labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
                      formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_requests', '')]}
                   />
-                  {keyNames.map((keyName: any, idx: number) => (
-                    <Area key={idx} type="monotone" dataKey={keyName + '_requests'} stroke={keyColors[idx % keyColors.length]} strokeWidth={2} fillOpacity={1} fill={`url(#colorKey${idx})`} name={keyName} />
+                  {keyNames.map((keyName: any) => (
+                    <Area key={keyName} type="monotone" dataKey={keyName + '_requests'} stroke={keyColorMap.get(keyName) || keyColors[0]} strokeWidth={2} fillOpacity={1} fill={`url(#colorKey-${keyName})`} name={keyName} />
                   ))}
                 </AreaChart>
               </ResponsiveContainer>
@@ -311,8 +332,8 @@ export default function DashboardPage() {
                      labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
                      formatter={(value: number, name: string) => [value.toLocaleString(), name.replace('_tokens', '')]}
                   />
-                  {keyNames.map((keyName: any, idx: number) => (
-                    <Bar key={idx} dataKey={keyName + '_tokens'} stackId="token" fill="#8B5CF6" name={keyName} radius={[4, 4, 0, 0]} />
+                  {keyNames.map((keyName: any) => (
+                    <Bar key={keyName} dataKey={keyName + '_tokens'} stackId="token" fill={keyColorMap.get(keyName) || keyColors[0]} name={keyName} radius={[4, 4, 0, 0]} minPointSize={getMinVisibleBarSize} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -332,7 +353,7 @@ export default function DashboardPage() {
                      labelFormatter={(_, payload) => payload?.[0]?.payload?.hour || ''}
                      formatter={(value: number) => [value.toLocaleString(), 'Token']}
                    />
-                    <Bar dataKey="tokens" fill="#8b5cf6" name="Token" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="tokens" fill="#8b5cf6" name="Token" radius={[4, 4, 0, 0]} minPointSize={getMinVisibleBarSize} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -360,8 +381,8 @@ export default function DashboardPage() {
                     }}
                     labelStyle={{ color: 'var(--foreground)' }}
                   />
-                  {keyModelNames.map((keyName: any, idx: number) => (
-                    <Bar key={idx} dataKey={keyName} stackId="model" fill={keyColors[idx % keyColors.length]} name={keyName} radius={[4, 4, 0, 0]} />
+                  {keyModelNames.map((keyName: any) => (
+                    <Bar key={keyName} dataKey={keyName} stackId="model" fill={keyColorMap.get(keyName) || keyColors[0]} name={keyName} radius={[4, 4, 0, 0]} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
