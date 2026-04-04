@@ -123,7 +123,12 @@ export default function KeysPage() {
   async function testClientKey(id: number, currentStatus: string) {
     try {
       const result = await api.testClientKey(id)
-      showSuccess(`测试成功：${result.model}`)
+      const failedAttempts = (result.attempts || []).filter((attempt) => !attempt.success)
+      if (failedAttempts.length > 0) {
+        showSuccess(`测试成功：最终使用 ${result.model}。前序失败：${failedAttempts.map((attempt) => `${attempt.model} 不可用，因为 ${attempt.error}`).join('；')}`)
+      } else {
+        showSuccess(`测试成功：${result.model}`)
+      }
     } catch (err) {
       showError(err instanceof Error ? err.message : '测试失败')
       if (currentStatus === 'active') {
@@ -135,6 +140,18 @@ export default function KeysPage() {
           console.error('自动禁用失败', updateErr)
         }
       }
+    }
+  }
+
+  async function toggleClientKeyStatus(item: any) {
+    const targetStatus = item.status === 'active' ? 'disabled' : 'active'
+    try {
+      await api.updateClientKeyStatus(item.id, targetStatus)
+      showSuccess(targetStatus === 'active' ? '启用成功' : '禁用成功')
+      await load()
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '状态更新失败')
+      await load()
     }
   }
 
@@ -197,10 +214,10 @@ export default function KeysPage() {
         current_monthly_tokens: quotaData.current_monthly_tokens
       })
       setQuotaForm({
-        daily_request_limit: quotaData.daily_request_limit || '',
-        monthly_request_limit: quotaData.monthly_request_limit || '',
-        daily_token_limit: quotaData.daily_token_limit || '',
-        monthly_token_limit: quotaData.monthly_token_limit || ''
+        daily_request_limit: quotaData.daily_request_limit != null ? String(quotaData.daily_request_limit) : '',
+        monthly_request_limit: quotaData.monthly_request_limit != null ? String(quotaData.monthly_request_limit) : '',
+        daily_token_limit: quotaData.daily_token_limit != null ? String(quotaData.daily_token_limit) : '',
+        monthly_token_limit: quotaData.monthly_token_limit != null ? String(quotaData.monthly_token_limit) : ''
       })
       setQuotaModalOpen(true)
     } catch (err) {
@@ -333,7 +350,7 @@ export default function KeysPage() {
                       <Button variant="secondary" size="sm" onClick={async () => { const keyData = await api.getClientKey(item.id); setSelectedKeyForUse(keyData); setUseKeyModalOpen(true) }}>使用密钥</Button>
                       <Button variant="secondary" size="sm" onClick={() => openEditModal(item)}>编辑</Button>
                       <Button variant="secondary" size="sm" onClick={() => openQuotaModal(item)}>配额</Button>
-                      <Button variant="secondary" size="sm" loading={loadingStatus.has(item.id)} onClick={() => { setLoadingStatus(prev => new Set(prev).add(item.id)); api.updateClientKeyStatus(item.id, item.status === 'active' ? 'disabled' : 'active').then(() => { showSuccess('状态更新成功'); return load() }).catch((err) => showError(err.message)).finally(() => setLoadingStatus(prev => { const next = new Set(prev); next.delete(item.id); return next })) }} style={{ color: item.status === 'active' ? 'var(--danger)' : 'var(--success)' }}>{item.status === 'active' ? '禁用' : '启用'}</Button>
+                      <Button variant="secondary" size="sm" loading={loadingStatus.has(item.id)} onClick={() => { setLoadingStatus(prev => new Set(prev).add(item.id)); toggleClientKeyStatus(item).finally(() => setLoadingStatus(prev => { const next = new Set(prev); next.delete(item.id); return next })) }} style={{ color: item.status === 'active' ? 'var(--danger)' : 'var(--success)' }}>{item.status === 'active' ? '禁用' : '启用'}</Button>
                       <Button variant="destructive" size="sm" onClick={() => setPendingDeleteKey(item)}>删除</Button>
                     </div>
                   </TableCell>

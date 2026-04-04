@@ -16,12 +16,19 @@ import (
 	"localaihub/localaihub_go/internal/module/clientkey/repository"
 	gatewayrepo "localaihub/localaihub_go/internal/module/gateway/repository"
 	providerservice "localaihub/localaihub_go/internal/module/provider/service"
+	"localaihub/localaihub_go/internal/pkg/logger"
 	"localaihub/localaihub_go/internal/pkg/random"
 )
 
 type CreatedClientKey struct {
 	Key      *repository.ClientKey `json:"key"`
 	PlainKey string                `json:"plain_key"`
+}
+
+type testAttemptResult struct {
+	Model   string `json:"model"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
 }
 
 type ClientKeyService struct {
@@ -97,10 +104,11 @@ func (s *ClientKeyService) Create(ctx context.Context, name, remark, expiresAt s
 	if s.audit != nil {
 		s.audit.Log(ctx, "client_key.create", "api_client", &id, map[string]any{"name": name, "key_prefix": created.KeyPrefix}, ip, userAgent)
 	}
-	if _, testErr := s.Test(ctx, id); testErr != nil {
-		_ = s.repo.UpdateStatus(ctx, id, "disabled")
-		created.Status = "disabled"
-	}
+	go func() {
+		if _, testErr := s.Test(context.Background(), id); testErr != nil {
+			logger.Log.Warn().Int64("client_key_id", id).Err(testErr).Msg("client key initial test failed")
+		}
+	}()
 	return &CreatedClientKey{Key: created, PlainKey: plainKey}, nil
 }
 
@@ -149,33 +157,69 @@ func (s *ClientKeyService) Test(ctx context.Context, id int64) (map[string]any, 
 	if item == nil {
 		return nil, fmt.Errorf("client key not found")
 	}
-	allowedModels, err := s.repo.GetAllowedModels(ctx, id)
+
+	candidateModels, err := s.listCandidateModels(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if len(allowedModels) == 0 {
-		visibleModels, listErr := s.gatewayRepo.ListVisibleModels(ctx)
-		if listErr != nil {
-			return nil, listErr
+
+	attempts := make([]testAttemptResult, 0, len(candidateModels))
+	failureMessages := make([]string, 0, len(candidateModels))
+	for _, modelID := range candidateModels {
+		result, attempt, err := s.testSingleModel(ctx, modelID)
+		attempts = append(attempts, attempt)
+		if err == nil {
+			result["attempts"] = attempts
+			return result, nil
 		}
-		if len(visibleModels) == 0 {
-			return nil, fmt.Errorf("no available model configured")
-		}
-		if firstID, ok := visibleModels[0]["id"].(int64); ok {
-			allowedModels = []int64{firstID}
-		} else {
-			return nil, fmt.Errorf("no testable model found")
+		failureMessages = append(failureMessages, fmt.Sprintf("%s 不可用，因为 %s", attempt.Model, attempt.Error))
+	}
+
+	return nil, fmt.Errorf(strings.Join(failureMessages, "；"))
+}
+
+func (s *ClientKeyService) listCandidateModels(ctx context.Context, clientKeyID int64) ([]int64, error) {
+	allowedModels, err := s.repo.GetAllowedModels(ctx, clientKeyID)
+	if err != nil {
+		return nil, err
+	}
+	if len(allowedModels) > 0 {
+		return allowedModels, nil
+	}
+
+	visibleModels, err := s.gatewayRepo.ListVisibleModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(visibleModels) == 0 {
+		return nil, fmt.Errorf("no available model configured")
+	}
+
+	candidateModels := make([]int64, 0, len(visibleModels))
+	for _, model := range visibleModels {
+		id, ok := model["id"].(int64)
+		if ok {
+			candidateModels = append(candidateModels, id)
 		}
 	}
-	modelID := allowedModels[0]
+	if len(candidateModels) == 0 {
+		return nil, fmt.Errorf("no testable model found")
+	}
+	return candidateModels, nil
+}
+
+func (s *ClientKeyService) testSingleModel(ctx context.Context, modelID int64) (map[string]any, testAttemptResult, error) {
 	modelCode, route, err := s.resolveTestRoute(ctx, modelID)
 	if err != nil {
-		return nil, err
+		return nil, testAttemptResult{Model: modelLabel(modelCode, modelID), Success: false, Error: err.Error()}, err
 	}
+
 	providerKey, secret, err := s.providerKeyService.SelectForRequest(ctx, route.ProviderID)
 	if err != nil || providerKey == nil || secret == "" {
-		return nil, fmt.Errorf("no available provider key")
+		attempt := testAttemptResult{Model: modelLabel(modelCode, modelID), Success: false, Error: "no available provider key"}
+		return nil, attempt, fmt.Errorf(attempt.Error)
 	}
+
 	payload := map[string]any{
 		"model":      route.UpstreamModelName,
 		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
@@ -184,8 +228,10 @@ func (s *ClientKeyService) Test(ctx context.Context, id int64) (map[string]any, 
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		attempt := testAttemptResult{Model: modelLabel(modelCode, modelID), Success: false, Error: err.Error()}
+		return nil, attempt, err
 	}
+
 	requestURL := strings.TrimRight(route.BaseURL, "/")
 	requestURL = strings.ReplaceAll(requestURL, "/v1/v1", "/v1")
 	requestURL = strings.ReplaceAll(requestURL, "/v1/", "/")
@@ -195,7 +241,8 @@ func (s *ClientKeyService) Test(ctx context.Context, id int64) (map[string]any, 
 	requestURL += "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		attempt := testAttemptResult{Model: modelCode, Success: false, Error: err.Error()}
+		return nil, attempt, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if route.AuthType == "x_api_key" {
@@ -203,16 +250,36 @@ func (s *ClientKeyService) Test(ctx context.Context, id int64) (map[string]any, 
 	} else {
 		req.Header.Set("Authorization", "Bearer "+secret)
 	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		attempt := testAttemptResult{Model: modelCode, Success: false, Error: err.Error()}
+		return nil, attempt, err
 	}
 	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("upstream error: %s", strings.TrimSpace(string(respBody)))
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Log.Warn().Err(err).Msg("failed to read upstream response body")
 	}
-	return map[string]any{"ok": true, "model": modelCode, "url": requestURL}, nil
+	if resp.StatusCode >= 400 {
+		msg := strings.TrimSpace(string(respBody))
+		if msg == "" {
+			msg = resp.Status
+		}
+		attempt := testAttemptResult{Model: modelCode, Success: false, Error: "upstream error: " + msg}
+		return nil, attempt, fmt.Errorf(attempt.Error)
+	}
+
+	attempt := testAttemptResult{Model: modelCode, Success: true}
+	return map[string]any{"ok": true, "model": modelCode, "url": requestURL}, attempt, nil
+}
+
+func modelLabel(modelCode string, modelID int64) string {
+	if modelCode != "" {
+		return modelCode
+	}
+	return fmt.Sprintf("model#%d", modelID)
 }
 
 func (s *ClientKeyService) resolveTestRoute(ctx context.Context, modelID int64) (string, *gatewayrepo.ModelRoute, error) {

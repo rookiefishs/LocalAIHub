@@ -103,7 +103,7 @@ func (s *ProviderKeyService) SelectForRequest(ctx context.Context, providerID in
 				logger.Log.Debug().Int64("provider_id", providerID).Int64("key_id", k.ID).Str("status", k.Status).Msg("available key")
 			}
 		}
-		return nil, "", nil
+		return nil, "", fmt.Errorf("no available provider key for provider_id %d", providerID)
 	}
 	logger.Log.Debug().Int64("provider_id", providerID).Int64("key_id", item.ID).Str("status", item.Status).Msg("provider key found")
 	secret, err := decodeSecret(item.SecretEncrypted, s.encryptionKey)
