@@ -151,9 +151,17 @@ func (s *GatewayService) authenticateClientWithRequest(ctx context.Context, auth
 		s.logAuthFailure(ctx, client, "quota_disabled", ip, userAgent)
 		return nil, fmt.Errorf("api key disabled due to quota exceeded (API Key因配额超限被禁用)")
 	}
-	if err := s.checkAndEnforceQuota(ctx, client); err != nil {
+	allowed, reason, err := s.repo.CheckAndIncrementUsage(ctx, client.ID, client.DailyRequestLimit, client.MonthlyRequestLimit, client.DailyTokenLimit, client.MonthlyTokenLimit)
+	if err != nil {
+		logger.Log.Error().Err(err).Int64("client_id", client.ID).Msg("failed to check and increment usage")
+		return nil, fmt.Errorf("internal error")
+	}
+	if !allowed {
 		s.logAuthFailure(ctx, client, "quota_exceeded", ip, userAgent)
-		return nil, err
+		if disErr := s.repo.DisableClient(ctx, client.ID); disErr != nil {
+			logger.Log.Error().Err(disErr).Msg("failed to disable client due to quota exceeded")
+		}
+		return nil, fmt.Errorf("quota exceeded: %s", reason)
 	}
 	if err := s.repo.TouchClientLastUsed(ctx, client.ID); err != nil {
 		logger.Log.Error().Err(err).Int64("client_id", client.ID).Msg("failed to touch client last used")
@@ -263,31 +271,87 @@ type ProxyHTTPResult struct {
 	AfterStream func([]byte)
 }
 
+type proxyAttemptResult struct {
+	result      *ProxyHTTPResult
+	retryable   bool
+	route       *repository.ModelRoute
+	providerKey *providerrepo.ProviderKey
+	errorBody   []byte
+	errorMsg    string
+	statusCode  int
+}
+
 func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *repository.GatewayClient, method, path, rawQuery string, rawBody []byte, incomingHeaders http.Header) (*ProxyHTTPResult, error) {
 	route, err := s.resolveOpenAIRouteForProxy(ctx, client, path, rawBody)
 	if err != nil {
 		return nil, err
 	}
+
+	attemptedBindingIDs := make([]int64, 0, 4)
+	if route.CurrentBindingID != nil {
+		attemptedBindingIDs = append(attemptedBindingIDs, *route.CurrentBindingID)
+	}
+
+	attempt, err := s.executeProxyAttempt(ctx, client, route, method, path, rawQuery, rawBody, incomingHeaders)
+	if err != nil {
+		return nil, err
+	}
+	if attempt.result != nil {
+		return attempt.result, nil
+	}
+	if !attempt.retryable {
+		return nil, buildProxyAttemptError(attempt)
+	}
+
+	fallbackRoutes, err := s.repo.ListOpenAIFallbackRoutes(ctx, route.VirtualModelID, attemptedBindingIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, fallbackRoute := range fallbackRoutes {
+		fallbackRoute := fallbackRoute
+		if fallbackRoute.CurrentBindingID != nil {
+			attemptedBindingIDs = append(attemptedBindingIDs, *fallbackRoute.CurrentBindingID)
+		}
+		fallbackAttempt, runErr := s.executeProxyAttempt(ctx, client, &fallbackRoute, method, path, rawQuery, rawBody, incomingHeaders)
+		if runErr != nil {
+			return nil, runErr
+		}
+		if fallbackAttempt.result != nil {
+			if route.CurrentBindingID != nil && fallbackRoute.CurrentBindingID != nil && *route.CurrentBindingID != *fallbackRoute.CurrentBindingID {
+				if switchErr := s.routeService.AutoSwitchCurrentBinding(ctx, route.VirtualModelID, *route.CurrentBindingID, *fallbackRoute.CurrentBindingID, "auto switch after proxy fallback success"); switchErr != nil {
+					logger.Log.Error().Err(switchErr).Int64("virtual_model_id", route.VirtualModelID).Int64("from_binding_id", *route.CurrentBindingID).Int64("to_binding_id", *fallbackRoute.CurrentBindingID).Msg("failed to auto switch route after proxy fallback success")
+				}
+			}
+			return fallbackAttempt.result, nil
+		}
+		attempt = fallbackAttempt
+		if !fallbackAttempt.retryable {
+			break
+		}
+	}
+
+	return nil, buildProxyAttemptError(attempt)
+}
+
+func (s *GatewayService) executeProxyAttempt(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, method, path, rawQuery string, rawBody []byte, incomingHeaders http.Header) (*proxyAttemptResult, error) {
+	start := time.Now()
 	providerKey, secret, err := s.providerKeyService.SelectForRequest(ctx, route.ProviderID)
 	if err != nil || providerKey == nil || secret == "" {
-		return nil, fmt.Errorf("no available provider key")
+		msg := "no available provider key"
+		if reportErr := reportProviderKeySelectionFailure(err); reportErr != nil {
+			logger.Log.Error().Err(reportErr).Msg("provider key selection failed before proxy attempt")
+		}
+		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, msg); registerErr != nil {
+			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route failure for missing provider key")
+		}
+		return &proxyAttemptResult{retryable: true, route: route, statusCode: http.StatusBadGateway, errorMsg: msg}, nil
 	}
-	requestURL := strings.TrimRight(route.BaseURL, "/")
-	requestURL = strings.ReplaceAll(requestURL, "/v1/v1", "/v1")
-	requestURL = strings.ReplaceAll(requestURL, "/v1/", "/")
-	if !strings.HasSuffix(requestURL, "/v1") {
-		requestURL += "/v1"
-	}
-	trimmedPath := strings.TrimPrefix(path, "/proxy/openai/v1")
-	requestURL += trimmedPath
-	if rawQuery != "" {
-		requestURL += "?" + rawQuery
-	}
+
+	requestURL := buildOpenAIProxyURL(route.BaseURL, path, rawQuery)
 	logger.Log.Debug().Str("method", method).Str("path", path).Str("target_url", requestURL).Str("auth_type", route.AuthType).Str("upstream_model", route.UpstreamModelName).Msg("transparent proxy forwarding")
 
-	rawBody = replaceModelInBody(rawBody, route.UpstreamModelName)
-
-	upstreamReq, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(rawBody))
+	rewrittenBody := replaceModelInBody(rawBody, route.UpstreamModelName)
+	upstreamReq, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(rewrittenBody))
 	if err != nil {
 		return nil, err
 	}
@@ -299,6 +363,7 @@ func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *reposit
 		upstreamReq.Header.Set("Authorization", "Bearer "+secret)
 		upstreamReq.Header.Del("x-api-key")
 	}
+
 	resp, err := s.httpClient.Do(upstreamReq)
 	if err != nil {
 		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, err.Error()); reportErr != nil {
@@ -307,24 +372,15 @@ func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *reposit
 		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, err.Error()); registerErr != nil {
 			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route failure")
 		}
-		return nil, err
+		return &proxyAttemptResult{retryable: isRetryableProxyError(http.StatusBadGateway, err), route: route, providerKey: providerKey, statusCode: http.StatusBadGateway, errorMsg: err.Error()}, nil
 	}
+
 	if isStreamingResponse(resp.Header) {
-		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
-			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key success for proxy stream")
+		streamResult, streamErr := s.handleStreamingProxyAttempt(ctx, client, route, providerKey, method, path, rewrittenBody, resp, start)
+		if streamErr != nil {
+			return nil, streamErr
 		}
-		if registerErr := s.routeService.RegisterSuccess(ctx, route.ProviderID, route.VirtualModelID); registerErr != nil {
-			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route success for stream")
-		}
-		return &ProxyHTTPResult{
-			StatusCode: resp.StatusCode,
-			Headers:    resp.Header.Clone(),
-			StreamBody: resp.Body,
-			IsStream:   true,
-			AfterStream: func(streamBody []byte) {
-				s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, true, streamBody, nil, nil)
-			},
-		}, nil
+		return streamResult, nil
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -335,7 +391,7 @@ func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *reposit
 		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, err.Error()); registerErr != nil {
 			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route failure after read error")
 		}
-		return nil, err
+		return &proxyAttemptResult{retryable: true, route: route, providerKey: providerKey, statusCode: http.StatusBadGateway, errorMsg: err.Error()}, nil
 	}
 	if resp.StatusCode >= 400 {
 		upstreamErrMsg := parseUpstreamError(body)
@@ -351,18 +407,114 @@ func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *reposit
 			Str("model_code", route.ModelCode).
 			Str("provider_url", route.BaseURL).
 			Msg("upstream request failed")
-		s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, false, body, nil, &upstreamErrMsg)
-		return nil, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
-	} else {
-		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
-			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key result for proxy success")
-		}
-		if registerErr := s.routeService.RegisterSuccess(ctx, route.ProviderID, route.VirtualModelID); registerErr != nil {
-			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route success")
-		}
-		s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, true, body, nil, nil)
+		latency := int(time.Since(start).Milliseconds())
+		s.logProxyRequest(ctx, client, route, providerKey, method, path, rewrittenBody, resp.StatusCode, false, body, &latency, nil, &upstreamErrMsg)
+		return &proxyAttemptResult{retryable: isRetryableProxyError(resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}), route: route, providerKey: providerKey, errorBody: body, errorMsg: upstreamErrMsg, statusCode: resp.StatusCode}, nil
 	}
-	return &ProxyHTTPResult{StatusCode: resp.StatusCode, Headers: resp.Header.Clone(), Body: body}, nil
+
+	if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
+		logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key result for proxy success")
+	}
+	if registerErr := s.routeService.RegisterSuccess(ctx, route.ProviderID, route.VirtualModelID); registerErr != nil {
+		logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route success")
+	}
+	latency := int(time.Since(start).Milliseconds())
+	s.logProxyRequest(ctx, client, route, providerKey, method, path, rewrittenBody, resp.StatusCode, true, body, &latency, nil, nil)
+	return &proxyAttemptResult{result: &ProxyHTTPResult{StatusCode: resp.StatusCode, Headers: resp.Header.Clone(), Body: body}}, nil
+}
+
+func (s *GatewayService) handleStreamingProxyAttempt(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, method, path string, rawBody []byte, resp *http.Response, start time.Time) (*proxyAttemptResult, error) {
+	buffer := make([]byte, 32*1024)
+	n, readErr := resp.Body.Read(buffer)
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		_ = resp.Body.Close()
+		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, readErr.Error()); reportErr != nil {
+			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key result after proxy stream prelude error")
+		}
+		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, readErr.Error()); registerErr != nil {
+			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route failure after stream prelude error")
+		}
+		return &proxyAttemptResult{retryable: true, route: route, providerKey: providerKey, statusCode: http.StatusBadGateway, errorMsg: readErr.Error()}, nil
+	}
+	prefix := append([]byte(nil), buffer[:n]...)
+	if resp.StatusCode >= 400 {
+		remainingBody, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			remainingBody = nil
+		}
+		body := append(prefix, remainingBody...)
+		upstreamErrMsg := parseUpstreamError(body)
+		latency := int(time.Since(start).Milliseconds())
+		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, resp.Status); reportErr != nil {
+			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key result for proxy stream upstream failure")
+		}
+		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, resp.Status); registerErr != nil {
+			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route failure for stream upstream status")
+		}
+		s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, false, body, &latency, nil, &upstreamErrMsg)
+		return &proxyAttemptResult{retryable: isRetryableProxyError(resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}), route: route, providerKey: providerKey, errorBody: body, errorMsg: upstreamErrMsg, statusCode: resp.StatusCode}, nil
+	}
+	if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
+		logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report provider key success for proxy stream")
+	}
+	if registerErr := s.routeService.RegisterSuccess(ctx, route.ProviderID, route.VirtualModelID); registerErr != nil {
+		logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route success for stream")
+	}
+	mergedBody := io.NopCloser(io.MultiReader(bytes.NewReader(prefix), resp.Body))
+	return &proxyAttemptResult{result: &ProxyHTTPResult{
+		StatusCode: resp.StatusCode,
+		Headers:    resp.Header.Clone(),
+		StreamBody: mergedBody,
+		IsStream:   true,
+		AfterStream: func(streamBody []byte) {
+			latency := int(time.Since(start).Milliseconds())
+			s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, true, streamBody, &latency, nil, nil)
+		},
+	}}, nil
+}
+
+func buildOpenAIProxyURL(baseURL, path, rawQuery string) string {
+	requestURL := strings.TrimRight(baseURL, "/")
+	requestURL = strings.ReplaceAll(requestURL, "/v1/v1", "/v1")
+	requestURL = strings.ReplaceAll(requestURL, "/v1/", "/")
+	if !strings.HasSuffix(requestURL, "/v1") {
+		requestURL += "/v1"
+	}
+	trimmedPath := strings.TrimPrefix(path, "/proxy/openai/v1")
+	requestURL += trimmedPath
+	if rawQuery != "" {
+		requestURL += "?" + rawQuery
+	}
+	return requestURL
+}
+
+func isRetryableProxyError(statusCode int, err error) bool {
+	if err == nil {
+		return false
+	}
+	if statusCode == http.StatusTooManyRequests || statusCode == http.StatusBadGateway || statusCode >= 500 {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "timeout") || strings.Contains(message, "connection") || strings.Contains(message, "circuit") || strings.Contains(message, "reset") || strings.Contains(message, "eof")
+}
+
+func buildProxyAttemptError(attempt *proxyAttemptResult) error {
+	if attempt == nil {
+		return fmt.Errorf("proxy request failed")
+	}
+	if attempt.statusCode >= 400 {
+		return &UpstreamError{StatusCode: attempt.statusCode, Message: attempt.errorMsg}
+	}
+	if attempt.errorMsg != "" {
+		return fmt.Errorf(attempt.errorMsg)
+	}
+	return fmt.Errorf("proxy request failed")
+}
+
+func reportProviderKeySelectionFailure(err error) error {
+	return err
 }
 
 func (s *GatewayService) resolveOpenAIRouteForProxy(ctx context.Context, client *repository.GatewayClient, path string, rawBody []byte) (*repository.ModelRoute, error) {
@@ -445,16 +597,74 @@ func (s *GatewayService) ForwardOpenAIResponses(ctx context.Context, client *rep
 	if !allowed {
 		return nil, stream, http.StatusForbidden, fmt.Errorf("client key is not allowed to access this model")
 	}
+
+	result, statusCode, err := s.executeOpenAICandidateChain(ctx, route, func(candidateRoute *repository.ModelRoute) (map[string]any, int, error) {
+		return s.tryResponsesRoute(ctx, client, raw, candidateRoute)
+	}, "auto switch after responses fallback success")
+	if err == nil {
+		return result, stream, statusCode, nil
+	}
+
+	fallbackResult, fallbackErr := s.forwardResponsesViaChatFallback(ctx, client, raw, err.Error())
+	if fallbackErr == nil {
+		return fallbackResult, stream, http.StatusOK, nil
+	}
+	return nil, stream, statusCode, err
+}
+
+func (s *GatewayService) executeOpenAICandidateChain(ctx context.Context, route *repository.ModelRoute, runner func(candidateRoute *repository.ModelRoute) (map[string]any, int, error), switchReason string) (map[string]any, int, error) {
+	attemptedBindingIDs := make([]int64, 0, 4)
+	if route.CurrentBindingID != nil {
+		attemptedBindingIDs = append(attemptedBindingIDs, *route.CurrentBindingID)
+	}
+
+	result, statusCode, err := runner(route)
+	if err == nil {
+		return result, statusCode, nil
+	}
+	if !shouldFallback(statusCode, err) {
+		return nil, statusCode, err
+	}
+
+	fallbackRoutes, fallbackErr := s.repo.ListOpenAIFallbackRoutes(ctx, route.VirtualModelID, attemptedBindingIDs)
+	if fallbackErr != nil {
+		return nil, http.StatusInternalServerError, fallbackErr
+	}
+	for _, fallbackRoute := range fallbackRoutes {
+		fallbackRoute := fallbackRoute
+		if fallbackRoute.CurrentBindingID != nil {
+			attemptedBindingIDs = append(attemptedBindingIDs, *fallbackRoute.CurrentBindingID)
+		}
+		fallbackResult, fallbackStatus, fallbackRunErr := runner(&fallbackRoute)
+		if fallbackRunErr == nil {
+			if route.CurrentBindingID != nil && fallbackRoute.CurrentBindingID != nil && *route.CurrentBindingID != *fallbackRoute.CurrentBindingID {
+				if switchErr := s.routeService.AutoSwitchCurrentBinding(ctx, route.VirtualModelID, *route.CurrentBindingID, *fallbackRoute.CurrentBindingID, switchReason); switchErr != nil {
+					logger.Log.Error().Err(switchErr).Int64("virtual_model_id", route.VirtualModelID).Int64("from_binding_id", *route.CurrentBindingID).Int64("to_binding_id", *fallbackRoute.CurrentBindingID).Msg("failed to auto switch route after fallback success")
+				}
+			}
+			return fallbackResult, fallbackStatus, nil
+		}
+		statusCode = fallbackStatus
+		err = fallbackRunErr
+		if !shouldFallback(fallbackStatus, fallbackRunErr) {
+			break
+		}
+	}
+
+	return nil, statusCode, err
+}
+
+func (s *GatewayService) tryResponsesRoute(ctx context.Context, client *repository.GatewayClient, raw map[string]any, route *repository.ModelRoute) (map[string]any, int, error) {
 	providerKey, secret, err := s.providerKeyService.SelectForRequest(ctx, route.ProviderID)
 	if err != nil || providerKey == nil || secret == "" {
-		return nil, stream, http.StatusBadGateway, fmt.Errorf("no available provider key")
+		return nil, http.StatusBadGateway, fmt.Errorf("no available provider key")
 	}
 	repaired := repairResponsesPayload(raw)
 	repaired["model"] = route.UpstreamModelName
 	repaired["stream"] = false
 	body, err := json.Marshal(repaired)
 	if err != nil {
-		return nil, stream, http.StatusInternalServerError, err
+		return nil, http.StatusInternalServerError, err
 	}
 	requestURL := strings.TrimRight(route.BaseURL, "/")
 	requestURL = strings.ReplaceAll(requestURL, "/v1/v1", "/v1")
@@ -465,7 +675,7 @@ func (s *GatewayService) ForwardOpenAIResponses(ctx context.Context, client *rep
 	requestURL += "/responses"
 	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, stream, http.StatusInternalServerError, err
+		return nil, http.StatusInternalServerError, err
 	}
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	if route.AuthType == "x_api_key" {
@@ -475,32 +685,42 @@ func (s *GatewayService) ForwardOpenAIResponses(ctx context.Context, client *rep
 	}
 	resp, err := s.httpClient.Do(upstreamReq)
 	if err != nil {
-		fallbackResult, fallbackErr := s.forwardResponsesViaChatFallback(ctx, client, raw, err.Error())
-		if fallbackErr == nil {
-			return fallbackResult, stream, http.StatusOK, nil
+		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, err.Error()); reportErr != nil {
+			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report responses provider key failure")
 		}
-		return nil, stream, http.StatusBadGateway, err
+		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, err.Error()); registerErr != nil {
+			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register responses route failure")
+		}
+		return nil, http.StatusBadGateway, err
 	}
 	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, stream, http.StatusBadGateway, err
+		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, err.Error()); reportErr != nil {
+			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report responses read failure")
+		}
+		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, err.Error()); registerErr != nil {
+			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register responses route failure after read")
+		}
+		return nil, http.StatusBadGateway, err
 	}
 	var mapped map[string]any
 	if err := json.Unmarshal(responseBody, &mapped); err != nil {
-		return nil, stream, http.StatusBadGateway, err
+		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, err.Error()); reportErr != nil {
+			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report responses parse failure")
+		}
+		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, err.Error()); registerErr != nil {
+			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register responses route failure after parse")
+		}
+		return nil, http.StatusBadGateway, err
 	}
 	if resp.StatusCode >= 400 {
 		upstreamErrMsg := parseUpstreamError(responseBody)
-		if message, ok := mapped["error"].(map[string]any); ok {
-			if msg, ok := message["message"].(string); ok {
-				upstreamErrMsg = msg
-				fallbackResult, fallbackErr := s.forwardResponsesViaChatFallback(ctx, client, raw, msg)
-				if fallbackErr == nil {
-					return fallbackResult, stream, http.StatusOK, nil
-				}
-				return nil, stream, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
-			}
+		if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, false, resp.Status); reportErr != nil {
+			logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report responses upstream error")
+		}
+		if _, registerErr := s.routeService.RegisterFailure(ctx, route.ProviderID, route.VirtualModelID, resp.Status); registerErr != nil {
+			logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register responses upstream failure status")
 		}
 		logger.Log.Error().
 			Int("status_code", resp.StatusCode).
@@ -508,13 +728,15 @@ func (s *GatewayService) ForwardOpenAIResponses(ctx context.Context, client *rep
 			Str("model_code", route.ModelCode).
 			Str("provider_url", route.BaseURL).
 			Msg("openai responses upstream request failed")
-		fallbackResult, fallbackErr := s.forwardResponsesViaChatFallback(ctx, client, raw, fmt.Sprintf("upstream error: %d", resp.StatusCode))
-		if fallbackErr == nil {
-			return fallbackResult, stream, http.StatusOK, nil
-		}
-		return nil, stream, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
+		return nil, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
 	}
-	return mapped, stream, resp.StatusCode, nil
+	if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
+		logger.Log.Error().Err(reportErr).Int64("provider_key_id", providerKey.ID).Msg("failed to report responses success")
+	}
+	if registerErr := s.routeService.RegisterSuccess(ctx, route.ProviderID, route.VirtualModelID); registerErr != nil {
+		logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register responses route success")
+	}
+	return mapped, resp.StatusCode, nil
 }
 
 func (s *GatewayService) forwardResponsesViaChatFallback(ctx context.Context, client *repository.GatewayClient, raw map[string]any, upstreamMessage string) (map[string]any, error) {
@@ -713,6 +935,7 @@ func mapChatCompletionToResponses(raw map[string]any, chatResp map[string]any, n
 }
 
 func (s *GatewayService) ForwardAnthropicMessages(ctx context.Context, client *repository.GatewayClient, req AnthropicMessagesRequest) (*ProxyHTTPResult, int, error) {
+	start := time.Now()
 	if req.Model == "" || len(req.Messages) == 0 || req.MaxTokens <= 0 {
 		return nil, http.StatusBadRequest, fmt.Errorf("model, messages and max_tokens are required")
 	}
@@ -790,7 +1013,8 @@ func (s *GatewayService) ForwardAnthropicMessages(ctx context.Context, client *r
 			StreamBody: resp.Body,
 			IsStream:   true,
 			AfterStream: func(streamBody []byte) {
-				s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, true, streamBody, nil, nil, "anthropic")
+				latency := int(time.Since(start).Milliseconds())
+				s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, true, streamBody, &latency, nil, nil, "anthropic")
 			},
 		}, resp.StatusCode, nil
 	}
@@ -842,27 +1066,11 @@ func (s *GatewayService) ForwardAnthropicMessages(ctx context.Context, client *r
 		logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register anthropic route success")
 	}
 
-	if client != nil && resp.StatusCode < 400 {
-		if usage, ok := mapped["usage"].(map[string]any); ok {
-			total := 0
-			if inputTokens, ok := usage["input_tokens"].(float64); ok {
-				total += int(inputTokens)
-			}
-			if outputTokens, ok := usage["output_tokens"].(float64); ok {
-				total += int(outputTokens)
-			}
-			if total > 0 {
-				if err := s.repo.IncrementClientUsage(ctx, client.ID, total); err != nil {
-					logger.Log.Error().Err(err).Msg("failed to increment anthropic client usage")
-				}
-			}
-		}
-	}
-
 	return &ProxyHTTPResult{StatusCode: resp.StatusCode, Headers: resp.Header.Clone(), Body: responseBody}, resp.StatusCode, nil
 }
 
 func (s *GatewayService) ForwardGeminiGenerateContent(ctx context.Context, client *repository.GatewayClient, modelCode string, req GeminiGenerateContentRequest, stream bool) (*ProxyHTTPResult, int, error) {
+	start := time.Now()
 	if modelCode == "" || len(req.Contents) == 0 {
 		return nil, http.StatusBadRequest, fmt.Errorf("model and contents are required")
 	}
@@ -963,7 +1171,8 @@ func (s *GatewayService) ForwardGeminiGenerateContent(ctx context.Context, clien
 			Str("model_code", route.ModelCode).
 			Str("provider_url", route.BaseURL).
 			Msg("gemini upstream request failed")
-		s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, false, responseBody, stringPtr(errorCodeForStatus(resp.StatusCode)), &upstreamErrMsg, "gemini")
+		latency := int(time.Since(start).Milliseconds())
+		s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, false, responseBody, &latency, stringPtr(errorCodeForStatus(resp.StatusCode)), &upstreamErrMsg, "gemini")
 		return nil, resp.StatusCode, &UpstreamError{StatusCode: resp.StatusCode, Message: upstreamErrMsg}
 	}
 	if reportErr := s.providerKeyService.ReportResult(ctx, providerKey.ID, true, ""); reportErr != nil {
@@ -972,7 +1181,8 @@ func (s *GatewayService) ForwardGeminiGenerateContent(ctx context.Context, clien
 	if registerErr := s.routeService.RegisterSuccess(ctx, route.ProviderID, route.VirtualModelID); registerErr != nil {
 		logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register gemini route success")
 	}
-	s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, true, responseBody, nil, nil, "gemini")
+	latency := int(time.Since(start).Milliseconds())
+	s.logProxyRequestWithProtocol(ctx, client, route, providerKey, http.MethodPost, requestURL, body, resp.StatusCode, true, responseBody, &latency, nil, nil, "gemini")
 	return &ProxyHTTPResult{StatusCode: resp.StatusCode, Headers: resp.Header.Clone(), Body: responseBody}, resp.StatusCode, nil
 }
 
@@ -989,28 +1199,17 @@ func (s *GatewayService) ForwardOpenAIChatCompletion(ctx context.Context, client
 	if route == nil {
 		return nil, http.StatusNotFound, fmt.Errorf("virtual model not found")
 	}
-
-	responsePayload, statusCode, err := s.tryRoute(ctx, client, req, route, start)
-	if err == nil {
-		return responsePayload, statusCode, nil
+	allowed, err := s.repo.ClientCanAccessModel(ctx, client.ID, route.VirtualModelID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	if !allowed {
+		return nil, http.StatusForbidden, fmt.Errorf("client key is not allowed to access this model")
 	}
 
-	if shouldFallback(statusCode, err) {
-		fallbackRoute, fallbackErr := s.repo.ResolveOpenAIFallbackRoute(ctx, route.VirtualModelID, derefInt64(route.CurrentBindingID))
-		if fallbackErr == nil && fallbackRoute != nil {
-			fallbackPayload, fallbackStatus, fallbackRunErr := s.tryRoute(ctx, client, req, fallbackRoute, start)
-			if fallbackRunErr == nil {
-				if route.CurrentBindingID != nil {
-					if switchErr := s.routeService.Switch(ctx, route.VirtualModelID, derefInt64(fallbackRoute.CurrentBindingID), false, nil, "auto switch after fallback success", 0, "", ""); switchErr != nil {
-						logger.Log.Error().Err(switchErr).Int64("virtual_model_id", route.VirtualModelID).Int64("from_binding_id", derefInt64(route.CurrentBindingID)).Int64("to_binding_id", derefInt64(fallbackRoute.CurrentBindingID)).Msg("failed to auto switch route after fallback success")
-					}
-				}
-				return fallbackPayload, fallbackStatus, nil
-			}
-		}
-	}
-
-	return nil, statusCode, err
+	return s.executeOpenAICandidateChain(ctx, route, func(candidateRoute *repository.ModelRoute) (map[string]any, int, error) {
+		return s.tryRoute(ctx, client, req, candidateRoute, start)
+	}, "auto switch after chat fallback success")
 }
 
 func (s *GatewayService) tryRoute(ctx context.Context, client *repository.GatewayClient, req OpenAIChatCompletionRequest, route *repository.ModelRoute, start time.Time) (map[string]any, int, error) {
@@ -1160,35 +1359,24 @@ func (s *GatewayService) logGatewayRequest(ctx context.Context, client *reposito
 	var requestMessages []string
 	for _, msg := range req.Messages {
 		if msg.Role == "user" || msg.Role == "system" {
-			content, _ := msg.Content.(string)
-			if len(content) > 500 {
-				content = content[:500] + "..."
+			content := summarizeMessageContent(msg.Content)
+			if content == "" {
+				continue
 			}
-			requestMessages = append(requestMessages, fmt.Sprintf("[%s] %s", msg.Role, content))
+			requestMessages = append(requestMessages, fmt.Sprintf("[%s] %s", msg.Role, truncatePreview(content, 500)))
 		}
 	}
 	requestSummary, _ := json.Marshal(map[string]any{
-		"messages": requestMessages,
-		"stream":   req.Stream,
-		"model":    req.Model,
+		"messages":        requestMessages,
+		"stream":          req.Stream,
+		"model":           req.Model,
+		"message_count":   len(req.Messages),
+		"content_preview": summarizeMessagesPreview(requestMessages),
 	})
 	var responseSummary json.RawMessage
 	var promptTokens, completionTokens, totalTokens *int
 	if respBody != nil {
-		if usage, ok := respBody["usage"].(map[string]any); ok {
-			if pt, ok := usage["prompt_tokens"].(float64); ok {
-				ptInt := int(pt)
-				promptTokens = &ptInt
-			}
-			if ct, ok := usage["completion_tokens"].(float64); ok {
-				ctInt := int(ct)
-				completionTokens = &ctInt
-			}
-			if tt, ok := usage["total_tokens"].(float64); ok {
-				ttInt := int(tt)
-				totalTokens = &ttInt
-			}
-		}
+		extractTokensFromMappedResponse("openai", respBody, &promptTokens, &completionTokens, &totalTokens)
 		responseSummary, _ = json.Marshal(map[string]any{
 			"has_choices":       respBody["choices"] != nil,
 			"status":            statusCode,
@@ -1200,15 +1388,19 @@ func (s *GatewayService) logGatewayRequest(ctx context.Context, client *reposito
 	clientID := client.ID
 	virtualModelID := route.VirtualModelID
 	virtualModelCode := route.ModelCode
+	requestedModel := req.Model
 	providerID := route.ProviderID
 	providerKeyID := providerKey.ID
 	upstreamModelName := route.UpstreamModelName
+	bindingID := route.CurrentBindingID
 	if err := s.repo.InsertRequestLog(ctx, repository.RequestLogInput{
 		TraceID:             appctx.RequestID(ctx),
 		ProtocolType:        "openai",
 		ClientID:            &clientID,
 		VirtualModelID:      &virtualModelID,
 		VirtualModelCode:    &virtualModelCode,
+		RequestedModel:      &requestedModel,
+		BindingID:           bindingID,
 		ProviderID:          &providerID,
 		ProviderKeyID:       &providerKeyID,
 		UpstreamModelName:   &upstreamModelName,
@@ -1232,34 +1424,24 @@ func (s *GatewayService) logGatewayRequest(ctx context.Context, client *reposito
 	}
 }
 
-func (s *GatewayService) logProxyRequest(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, method, path string, rawBody []byte, statusCode int, success bool, respBody []byte, errorCode, errorMessage *string) {
-	s.logProxyRequestWithProtocol(ctx, client, route, providerKey, method, path, rawBody, statusCode, success, respBody, errorCode, errorMessage, "openai")
+func (s *GatewayService) logProxyRequest(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, method, path string, rawBody []byte, statusCode int, success bool, respBody []byte, latency *int, errorCode, errorMessage *string) {
+	s.logProxyRequestWithProtocol(ctx, client, route, providerKey, method, path, rawBody, statusCode, success, respBody, latency, errorCode, errorMessage, inferProxyProtocol(path))
 }
 
-func (s *GatewayService) logProxyRequestWithProtocol(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, method, path string, rawBody []byte, statusCode int, success bool, respBody []byte, errorCode, errorMessage *string, protocol string) {
+func (s *GatewayService) logProxyRequestWithProtocol(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, method, path string, rawBody []byte, statusCode int, success bool, respBody []byte, latency *int, errorCode, errorMessage *string, protocol string) {
 	var modelName string
 	if route != nil {
 		modelName = route.UpstreamModelName
 	}
-	requestSummary, _ := json.Marshal(map[string]any{
-		"method": method,
-		"path":   path,
-		"model":  modelName,
-	})
+	requestSummaryData := buildProxyRequestSummary(protocol, method, path, modelName, rawBody)
+	requestSummary, _ := json.Marshal(requestSummaryData)
+	requestedModel, _ := requestSummaryData["model"].(string)
 	var responseSummary json.RawMessage
 	var promptTokens, completionTokens, totalTokens *int
 	if respBody != nil {
 		var mapped map[string]any
 		if err := json.Unmarshal(respBody, &mapped); err == nil {
-			if usage, ok := mapped["usage"].(map[string]any); ok {
-				if protocol == "anthropic" {
-					parseAnthropicTokensFromUsage(usage, &promptTokens, &completionTokens, &totalTokens)
-				} else {
-					parseTokensFromUsage(usage, &promptTokens, &completionTokens, &totalTokens)
-				}
-			} else if usage, ok := mapped["usageMetadata"].(map[string]any); ok {
-				parseGeminiTokensFromUsage(usage, &promptTokens, &completionTokens, &totalTokens)
-			}
+			extractTokensFromMappedResponse(protocol, mapped, &promptTokens, &completionTokens, &totalTokens)
 		} else {
 			if isSSEResponse(respBody) {
 				parseTokensFromSSE(respBody, protocol, &promptTokens, &completionTokens, &totalTokens)
@@ -1276,13 +1458,16 @@ func (s *GatewayService) logProxyRequestWithProtocol(ctx context.Context, client
 		})
 	}
 	var clientID, virtualModelID, providerID, providerKeyID int64
-	var virtualModelCode, upstreamModelName string
+	var virtualModelCode string
+	var bindingID *int64
+	var upstreamModelName string
 	if client != nil {
 		clientID = client.ID
 	}
 	if route != nil {
 		virtualModelID = route.VirtualModelID
 		virtualModelCode = route.ModelCode
+		bindingID = route.CurrentBindingID
 		providerID = route.ProviderID
 		upstreamModelName = route.UpstreamModelName
 	}
@@ -1290,12 +1475,18 @@ func (s *GatewayService) logProxyRequestWithProtocol(ctx context.Context, client
 		providerKeyID = providerKey.ID
 	}
 	statusCodePtr := statusCode
+	var requestedModelPtr *string
+	if requestedModel != "" {
+		requestedModelPtr = &requestedModel
+	}
 	if err := s.repo.InsertRequestLog(ctx, repository.RequestLogInput{
 		TraceID:             appctx.RequestID(ctx),
 		ProtocolType:        protocol,
 		ClientID:            &clientID,
 		VirtualModelID:      &virtualModelID,
 		VirtualModelCode:    &virtualModelCode,
+		RequestedModel:      requestedModelPtr,
+		BindingID:           bindingID,
 		ProviderID:          &providerID,
 		ProviderKeyID:       &providerKeyID,
 		UpstreamModelName:   &upstreamModelName,
@@ -1303,6 +1494,7 @@ func (s *GatewayService) logProxyRequestWithProtocol(ctx context.Context, client
 		ResponseSummaryJSON: responseSummary,
 		StatusCode:          &statusCodePtr,
 		Success:             success,
+		LatencyMS:           latency,
 		PromptTokens:        promptTokens,
 		CompletionTokens:    completionTokens,
 		TotalTokens:         totalTokens,
@@ -1323,6 +1515,171 @@ func bearerOrRawKey(header string) string {
 		return strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
 	}
 	return strings.TrimSpace(header)
+}
+
+func buildProxyRequestSummary(protocol, method, path, fallbackModel string, rawBody []byte) map[string]any {
+	summary := map[string]any{
+		"method":    method,
+		"path":      path,
+		"model":     fallbackModel,
+		"body_size": len(rawBody),
+	}
+	if len(rawBody) == 0 {
+		return summary
+	}
+	switch protocol {
+	case "anthropic":
+		applyAnthropicSummary(summary, rawBody)
+	case "gemini":
+		applyGeminiSummary(summary, rawBody)
+	default:
+		applyOpenAISummary(summary, rawBody)
+	}
+	if preview, _ := summary["content_preview"].(string); preview == "" {
+		if messages, ok := summary["messages"].([]string); ok {
+			summary["content_preview"] = summarizeMessagesPreview(messages)
+		}
+	}
+	if model, _ := summary["model"].(string); model == "" {
+		summary["model"] = fallbackModel
+	}
+	return summary
+}
+
+func applyOpenAISummary(summary map[string]any, rawBody []byte) {
+	var req OpenAIChatCompletionRequest
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		return
+	}
+	if req.Model != "" {
+		summary["model"] = req.Model
+	}
+	summary["stream"] = req.Stream
+	summary["message_count"] = len(req.Messages)
+	messages := make([]string, 0, len(req.Messages))
+	for _, msg := range req.Messages {
+		if msg.Role != "user" && msg.Role != "system" && msg.Role != "assistant" {
+			continue
+		}
+		content := summarizeMessageContent(msg.Content)
+		if content == "" {
+			continue
+		}
+		messages = append(messages, fmt.Sprintf("[%s] %s", msg.Role, truncatePreview(content, 500)))
+	}
+	if len(messages) > 0 {
+		summary["messages"] = messages
+		summary["content_preview"] = summarizeMessagesPreview(messages)
+	}
+}
+
+func applyAnthropicSummary(summary map[string]any, rawBody []byte) {
+	var req AnthropicMessagesRequest
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		return
+	}
+	if req.Model != "" {
+		summary["model"] = req.Model
+	}
+	summary["stream"] = req.Stream
+	messageCount := len(req.Messages)
+	if strings.TrimSpace(req.System) != "" {
+		messageCount++
+	}
+	summary["message_count"] = messageCount
+	messages := make([]string, 0, messageCount)
+	if system := truncatePreview(strings.TrimSpace(req.System), 500); system != "" {
+		messages = append(messages, fmt.Sprintf("[system] %s", system))
+	}
+	for _, msg := range req.Messages {
+		content := summarizeMessageContent(msg.Content)
+		if content == "" {
+			continue
+		}
+		messages = append(messages, fmt.Sprintf("[%s] %s", msg.Role, truncatePreview(content, 500)))
+	}
+	if len(messages) > 0 {
+		summary["messages"] = messages
+		summary["content_preview"] = summarizeMessagesPreview(messages)
+	}
+}
+
+func applyGeminiSummary(summary map[string]any, rawBody []byte) {
+	var req GeminiGenerateContentRequest
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		return
+	}
+	messages := make([]string, 0, len(req.Contents)+1)
+	if system := summarizeMessageContent(req.SystemInstruction); system != "" {
+		messages = append(messages, fmt.Sprintf("[system] %s", truncatePreview(system, 500)))
+	}
+	for _, content := range req.Contents {
+		role, _ := content["role"].(string)
+		if role == "" {
+			role = "user"
+		}
+		text := summarizeMessageContent(content)
+		if text == "" {
+			continue
+		}
+		messages = append(messages, fmt.Sprintf("[%s] %s", role, truncatePreview(text, 500)))
+	}
+	if len(messages) > 0 {
+		summary["messages"] = messages
+		summary["message_count"] = len(messages)
+		summary["content_preview"] = summarizeMessagesPreview(messages)
+	}
+}
+
+func summarizeMessageContent(content any) string {
+	switch v := content.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []any:
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			if text := summarizeMessageContent(item); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, " ")
+	case map[string]any:
+		if text, _ := v["text"].(string); strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+		if input, _ := v["input_text"].(string); strings.TrimSpace(input) != "" {
+			return strings.TrimSpace(input)
+		}
+		if parts, ok := v["parts"].([]any); ok {
+			return summarizeMessageContent(parts)
+		}
+		if content, ok := v["content"]; ok {
+			return summarizeMessageContent(content)
+		}
+		return ""
+	default:
+		return ""
+	}
+}
+
+func summarizeMessagesPreview(messages []string) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	joined := strings.Join(messages, " | ")
+	return truncatePreview(joined, 300)
+}
+
+func truncatePreview(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if value == "" || limit <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit]) + "..."
 }
 
 func shouldFallback(statusCode int, err error) bool {
@@ -1355,6 +1712,20 @@ func derefInt64(value *int64) int64 {
 
 func stringPtr(value string) *string { return &value }
 
+func extractTokensFromMappedResponse(protocol string, mapped map[string]any, promptTokens, completionTokens, totalTokens **int) {
+	if usage, ok := mapped["usage"].(map[string]any); ok {
+		if protocol == "anthropic" {
+			parseAnthropicTokensFromUsage(usage, promptTokens, completionTokens, totalTokens)
+		} else {
+			parseCompatibleTokensFromUsage(protocol, usage, promptTokens, completionTokens, totalTokens)
+		}
+		return
+	}
+	if usage, ok := mapped["usageMetadata"].(map[string]any); ok {
+		parseGeminiTokensFromUsage(usage, promptTokens, completionTokens, totalTokens)
+	}
+}
+
 func parseTokensFromUsage(usage map[string]any, promptTokens, completionTokens, totalTokens **int) {
 	if pt, ok := usage["prompt_tokens"].(float64); ok {
 		ptInt := int(pt)
@@ -1368,6 +1739,18 @@ func parseTokensFromUsage(usage map[string]any, promptTokens, completionTokens, 
 		ttInt := int(tt)
 		*totalTokens = &ttInt
 	}
+}
+
+func parseCompatibleTokensFromUsage(protocol string, usage map[string]any, promptTokens, completionTokens, totalTokens **int) {
+	if protocol == "anthropic" {
+		parseAnthropicTokensFromUsage(usage, promptTokens, completionTokens, totalTokens)
+		return
+	}
+	parseTokensFromUsage(usage, promptTokens, completionTokens, totalTokens)
+	if *promptTokens != nil || *completionTokens != nil || *totalTokens != nil {
+		return
+	}
+	parseAnthropicTokensFromUsage(usage, promptTokens, completionTokens, totalTokens)
 }
 
 func parseGeminiTokensFromUsage(usage map[string]any, promptTokens, completionTokens, totalTokens **int) {
@@ -1403,8 +1786,22 @@ func parseAnthropicTokensFromUsage(usage map[string]any, promptTokens, completio
 	}
 }
 
+func inferProxyProtocol(path string) string {
+	if strings.Contains(path, "/anthropic/") || strings.HasSuffix(path, "/messages") {
+		return "anthropic"
+	}
+	if strings.Contains(path, "/gemini/") {
+		return "gemini"
+	}
+	return "openai"
+}
+
 func isSSEResponse(body []byte) bool {
-	return len(body) > 5 && string(body[:5]) == "data:"
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return false
+	}
+	return bytes.HasPrefix(trimmed, []byte("data:")) || bytes.HasPrefix(trimmed, []byte("event:")) || bytes.Contains(trimmed, []byte("\ndata:")) || bytes.Contains(trimmed, []byte("\nevent:"))
 }
 
 func isStreamingResponse(headers http.Header) bool {
@@ -1412,9 +1809,37 @@ func isStreamingResponse(headers http.Header) bool {
 	return strings.Contains(contentType, "text/event-stream")
 }
 
+func extractTokensFromSSEEvent(protocol string, mapped map[string]any, promptTokens, completionTokens, totalTokens **int) bool {
+	extractTokensFromMappedResponse(protocol, mapped, promptTokens, completionTokens, totalTokens)
+	if *promptTokens != nil || *completionTokens != nil || *totalTokens != nil {
+		return true
+	}
+	if protocol == "anthropic" {
+		extractTokensFromAnthropicStreamEvent(mapped, promptTokens, completionTokens, totalTokens)
+	} else {
+		extractTokensFromResponseEvent(mapped, promptTokens, completionTokens, totalTokens)
+	}
+	return *promptTokens != nil || *completionTokens != nil || *totalTokens != nil
+}
+
+func extractTokensFromResponseEvent(mapped map[string]any, promptTokens, completionTokens, totalTokens **int) {
+	response, ok := mapped["response"].(map[string]any)
+	if !ok {
+		return
+	}
+	extractTokensFromMappedResponse("openai", response, promptTokens, completionTokens, totalTokens)
+}
+
+func extractTokensFromAnthropicStreamEvent(mapped map[string]any, promptTokens, completionTokens, totalTokens **int) {
+	message, ok := mapped["message"].(map[string]any)
+	if !ok {
+		return
+	}
+	extractTokensFromMappedResponse("anthropic", message, promptTokens, completionTokens, totalTokens)
+}
+
 func parseTokensFromSSE(body []byte, protocol string, promptTokens, completionTokens, totalTokens **int) {
 	lines := strings.Split(string(body), "\n")
-	var lastUsage map[string]any
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "data:") {
@@ -1427,16 +1852,7 @@ func parseTokensFromSSE(body []byte, protocol string, promptTokens, completionTo
 		}
 		var mapped map[string]any
 		if err := json.Unmarshal([]byte(data), &mapped); err == nil {
-			if usage, ok := mapped["usage"].(map[string]any); ok {
-				lastUsage = usage
-			}
-		}
-	}
-	if lastUsage != nil {
-		if protocol == "anthropic" {
-			parseAnthropicTokensFromUsage(lastUsage, promptTokens, completionTokens, totalTokens)
-		} else {
-			parseTokensFromUsage(lastUsage, promptTokens, completionTokens, totalTokens)
+			extractTokensFromSSEEvent(protocol, mapped, promptTokens, completionTokens, totalTokens)
 		}
 	}
 }

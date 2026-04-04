@@ -8,16 +8,17 @@ import (
 )
 
 type RouteState struct {
-	ID               int64      `json:"id"`
-	VirtualModelID   int64      `json:"virtual_model_id"`
-	CurrentBindingID *int64     `json:"current_binding_id,omitempty"`
-	RouteStatus      string     `json:"route_status"`
-	ManualLocked     bool       `json:"manual_locked"`
-	LockUntil        *time.Time `json:"lock_until,omitempty"`
-	LastSwitchReason *string    `json:"last_switch_reason,omitempty"`
-	LastSwitchAt     *time.Time `json:"last_switch_at,omitempty"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	ModelCode        string     `json:"model_code,omitempty"`
+	ID                 int64      `json:"id"`
+	VirtualModelID     int64      `json:"virtual_model_id"`
+	CurrentBindingID   *int64     `json:"current_binding_id,omitempty"`
+	CurrentBindingName string     `json:"current_binding_name,omitempty"`
+	RouteStatus        string     `json:"route_status"`
+	ManualLocked       bool       `json:"manual_locked"`
+	LockUntil          *time.Time `json:"lock_until,omitempty"`
+	LastSwitchReason   *string    `json:"last_switch_reason,omitempty"`
+	LastSwitchAt       *time.Time `json:"last_switch_at,omitempty"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+	ModelCode          string     `json:"model_code,omitempty"`
 }
 
 type RouteRepository struct{ db *sql.DB }
@@ -30,7 +31,7 @@ func (r *RouteRepository) List(ctx context.Context, page, pageSize int) ([]Route
 		return nil, 0, err
 	}
 	offset := (page - 1) * pageSize
-	rows, err := r.db.QueryContext(ctx, `SELECT rs.id, rs.virtual_model_id, rs.current_binding_id, rs.route_status, rs.manual_locked, rs.lock_until, rs.last_switch_reason, rs.last_switch_at, rs.updated_at, vm.model_code FROM route_state rs INNER JOIN virtual_model vm ON vm.id = rs.virtual_model_id ORDER BY rs.updated_at DESC LIMIT ? OFFSET ?`, pageSize, offset)
+	rows, err := r.db.QueryContext(ctx, `SELECT rs.id, rs.virtual_model_id, rs.current_binding_id, COALESCE(vmb.upstream_model_name, ''), rs.route_status, rs.manual_locked, rs.lock_until, rs.last_switch_reason, rs.last_switch_at, rs.updated_at, vm.model_code FROM route_state rs INNER JOIN virtual_model vm ON vm.id = rs.virtual_model_id LEFT JOIN virtual_model_binding vmb ON vmb.id = rs.current_binding_id ORDER BY rs.updated_at DESC LIMIT ? OFFSET ?`, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -47,7 +48,7 @@ func (r *RouteRepository) List(ctx context.Context, page, pageSize int) ([]Route
 }
 
 func (r *RouteRepository) GetByVirtualModelID(ctx context.Context, virtualModelID int64) (*RouteState, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT rs.id, rs.virtual_model_id, rs.current_binding_id, rs.route_status, rs.manual_locked, rs.lock_until, rs.last_switch_reason, rs.last_switch_at, rs.updated_at, vm.model_code FROM route_state rs INNER JOIN virtual_model vm ON vm.id = rs.virtual_model_id WHERE rs.virtual_model_id = ? LIMIT 1`, virtualModelID)
+	row := r.db.QueryRowContext(ctx, `SELECT rs.id, rs.virtual_model_id, rs.current_binding_id, COALESCE(vmb.upstream_model_name, ''), rs.route_status, rs.manual_locked, rs.lock_until, rs.last_switch_reason, rs.last_switch_at, rs.updated_at, vm.model_code FROM route_state rs INNER JOIN virtual_model vm ON vm.id = rs.virtual_model_id LEFT JOIN virtual_model_binding vmb ON vmb.id = rs.current_binding_id WHERE rs.virtual_model_id = ? LIMIT 1`, virtualModelID)
 	return scanRouteState(row)
 }
 
@@ -64,6 +65,19 @@ func (r *RouteRepository) Switch(ctx context.Context, virtualModelID int64, bind
 	_, err = r.db.ExecContext(ctx, `INSERT INTO route_switch_log (virtual_model_id, from_binding_id, to_binding_id, trigger_type, operator_admin_id, reason, created_at) VALUES (?, NULL, ?, 'manual', ?, ?, ?)`, virtualModelID, bindingID, adminID, reason, now)
 	if err != nil {
 		return fmt.Errorf("insert route switch log: %w", err)
+	}
+	return nil
+}
+
+func (r *RouteRepository) AutoSwitchCurrentBinding(ctx context.Context, virtualModelID int64, fromBindingID, toBindingID int64, reason string) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `UPDATE route_state SET current_binding_id = ?, route_status = 'switched', manual_locked = 0, lock_until = NULL, last_switch_reason = ?, last_switch_at = ?, updated_at = ? WHERE virtual_model_id = ?`, toBindingID, reason, now, now, virtualModelID)
+	if err != nil {
+		return fmt.Errorf("auto update route state: %w", err)
+	}
+	_, err = r.db.ExecContext(ctx, `INSERT INTO route_switch_log (virtual_model_id, from_binding_id, to_binding_id, trigger_type, operator_admin_id, reason, created_at) VALUES (?, ?, ?, 'auto', NULL, ?, ?)`, virtualModelID, nullableBindingID(fromBindingID), toBindingID, reason, now)
+	if err != nil {
+		return fmt.Errorf("insert auto route switch log: %w", err)
 	}
 	return nil
 }
@@ -140,9 +154,10 @@ func (r *RouteRepository) CountBindings(ctx context.Context, virtualModelID int6
 func scanRouteState(scanner interface{ Scan(dest ...any) error }) (*RouteState, error) {
 	var item RouteState
 	var currentBindingID sql.NullInt64
+	var currentBindingName sql.NullString
 	var lockUntil, lastSwitchAt sql.NullTime
 	var lastSwitchReason sql.NullString
-	err := scanner.Scan(&item.ID, &item.VirtualModelID, &currentBindingID, &item.RouteStatus, &item.ManualLocked, &lockUntil, &lastSwitchReason, &lastSwitchAt, &item.UpdatedAt, &item.ModelCode)
+	err := scanner.Scan(&item.ID, &item.VirtualModelID, &currentBindingID, &currentBindingName, &item.RouteStatus, &item.ManualLocked, &lockUntil, &lastSwitchReason, &lastSwitchAt, &item.UpdatedAt, &item.ModelCode)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -151,6 +166,9 @@ func scanRouteState(scanner interface{ Scan(dest ...any) error }) (*RouteState, 
 	}
 	if currentBindingID.Valid {
 		item.CurrentBindingID = &currentBindingID.Int64
+	}
+	if currentBindingName.Valid {
+		item.CurrentBindingName = currentBindingName.String
 	}
 	if lockUntil.Valid {
 		item.LockUntil = &lockUntil.Time
@@ -162,4 +180,11 @@ func scanRouteState(scanner interface{ Scan(dest ...any) error }) (*RouteState, 
 		item.LastSwitchReason = &lastSwitchReason.String
 	}
 	return &item, nil
+}
+
+func nullableBindingID(value int64) any {
+	if value <= 0 {
+		return nil
+	}
+	return value
 }

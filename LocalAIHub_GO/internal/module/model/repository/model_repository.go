@@ -176,10 +176,15 @@ func (r *ModelRepository) DeleteBinding(ctx context.Context, id int64) error {
 
 func (r *ModelRepository) UpdateBinding(ctx context.Context, item *Binding) error {
 	_, err := r.db.ExecContext(ctx, `
-		UPDATE virtual_model_binding 
+		UPDATE virtual_model_binding
 		SET provider_id = ?, provider_key_id = ?, upstream_model_name = ?, priority = ?, is_same_name = ?, enabled = ?
 		WHERE id = ?
 	`, item.ProviderID, item.ProviderKeyID, item.UpstreamModelName, item.Priority, item.IsSameName, item.Enabled, item.ID)
+	return err
+}
+
+func (r *ModelRepository) SetCurrentBinding(ctx context.Context, virtualModelID, bindingID int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE route_state SET current_binding_id = ?, route_status = 'normal', updated_at = ? WHERE virtual_model_id = ?`, bindingID, time.Now().UTC(), virtualModelID)
 	return err
 }
 

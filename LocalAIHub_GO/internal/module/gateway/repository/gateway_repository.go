@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"localaihub/localaihub_go/internal/pkg/logger"
@@ -53,6 +54,8 @@ type RequestLogInput struct {
 	ClientID            *int64
 	VirtualModelID      *int64
 	VirtualModelCode    *string
+	RequestedModel      *string
+	BindingID           *int64
 	ProviderID          *int64
 	ProviderKeyID       *int64
 	UpstreamModelName   *string
@@ -70,24 +73,31 @@ type RequestLogInput struct {
 }
 
 type RequestLogRecord struct {
-	ID               int64     `json:"id"`
-	TraceID          string    `json:"trace_id"`
-	ProtocolType     string    `json:"protocol_type"`
-	ClientID         *int64    `json:"client_id,omitempty"`
-	KeyName          string    `json:"key_name,omitempty"`
-	VirtualModelCode *string   `json:"virtual_model_code,omitempty"`
-	ProviderID       *int64    `json:"provider_id,omitempty"`
-	UpstreamModel    *string   `json:"upstream_model_name,omitempty"`
-	StatusCode       *int      `json:"status_code,omitempty"`
-	Success          bool      `json:"success"`
-	LatencyMS        *int      `json:"latency_ms,omitempty"`
-	PromptTokens     *int      `json:"prompt_tokens,omitempty"`
-	CompletionTokens *int      `json:"completion_tokens,omitempty"`
-	TotalTokens      *int      `json:"total_tokens,omitempty"`
-	ErrorCode        *string   `json:"error_code,omitempty"`
-	ErrorMessage     *string   `json:"error_message,omitempty"`
-	RequestSummary   *string   `json:"request_summary,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID                int64     `json:"id"`
+	TraceID           string    `json:"trace_id"`
+	ProtocolType      string    `json:"protocol_type"`
+	ClientID          *int64    `json:"client_id,omitempty"`
+	KeyName           string    `json:"key_name,omitempty"`
+	VirtualModelID    *int64    `json:"virtual_model_id,omitempty"`
+	VirtualModelCode  *string   `json:"virtual_model_code,omitempty"`
+	VirtualModelName  *string   `json:"virtual_model_name,omitempty"`
+	RequestedModel    *string   `json:"requested_model,omitempty"`
+	BindingID         *int64    `json:"binding_id,omitempty"`
+	RouteName         *string   `json:"route_name,omitempty"`
+	ProviderID        *int64    `json:"provider_id,omitempty"`
+	ProviderName      *string   `json:"provider_name,omitempty"`
+	UpstreamModel     *string   `json:"upstream_model_name,omitempty"`
+	StatusCode        *int      `json:"status_code,omitempty"`
+	Success           bool      `json:"success"`
+	LatencyMS         *int      `json:"latency_ms,omitempty"`
+	PromptTokens      *int      `json:"prompt_tokens,omitempty"`
+	CompletionTokens  *int      `json:"completion_tokens,omitempty"`
+	TotalTokens       *int      `json:"total_tokens,omitempty"`
+	ErrorCode         *string   `json:"error_code,omitempty"`
+	ErrorMessage      *string   `json:"error_message,omitempty"`
+	RequestSummary    *string   `json:"request_summary,omitempty"`
+	ResponseSummary   *string   `json:"response_summary,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 type RequestLogFilters struct {
@@ -107,42 +117,39 @@ func NewGatewayRepository(db *sql.DB) *GatewayRepository { return &GatewayReposi
 
 func (r *GatewayRepository) CountRequests24h(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) CountRequests(ctx context.Context, hours int, clientID int64) (int64, error) {
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
 		var count int64
-		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
+		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
 		return count, err
 	}
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, hours).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) CountSuccessRequests(ctx context.Context, hours int, clientID int64) (int64, error) {
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
 		var count int64
-		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND success = 1 AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
+		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE client_id = ? AND success = 1 AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, clientID, hours).Scan(&count)
 		return count, err
 	}
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, hours).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) AvgLatency(ctx context.Context, hours int, clientID int64) (int64, error) {
 	var avg sql.NullFloat64
 	var err error
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
-		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE client_id = ? AND latency_ms IS NOT NULL AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&avg)
+		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE client_id = ? AND latency_ms IS NOT NULL AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, clientID, hours).Scan(&avg)
 	} else {
-		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&avg)
+		err = r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, hours).Scan(&avg)
 	}
 	if err != nil {
 		return 0, err
@@ -154,17 +161,16 @@ func (r *GatewayRepository) AvgLatency(ctx context.Context, hours int, clientID 
 }
 
 func (r *GatewayRepository) SumTokens(ctx context.Context, hours int, clientID int64) (prompt, completion, total int64, err error) {
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	if clientID > 0 {
-		err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, clientID, hours).Scan(&prompt, &completion, &total)
+		err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE client_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, clientID, hours).Scan(&prompt, &completion, &total)
 		return
 	}
-	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)`, hours).Scan(&prompt, &completion, &total)
+	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`, hours).Scan(&prompt, &completion, &total)
 	return
 }
 
 func (r *GatewayRepository) SumTokens24h(ctx context.Context) (prompt, completion, total int64, err error) {
-	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&prompt, &completion, &total)
+	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM request_log WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`).Scan(&prompt, &completion, &total)
 	return
 }
 
@@ -183,34 +189,37 @@ type ModelStat struct {
 	Count     int64  `json:"count"`
 }
 
+func dashboardTrendBucketSQL(column string, hours int) (selectExpr, groupBy string) {
+	if hours > 720 {
+		selectExpr = "DATE_FORMAT(" + column + ", '%Y-%m-%d 00:00')"
+		groupBy = "DATE_FORMAT(" + column + ", '%Y-%m-%d')"
+		return
+	}
+	if hours > 168 {
+		selectExpr = "CONCAT(DATE_FORMAT(" + column + ", '%Y-%m-%d '), LPAD(FLOOR(HOUR(" + column + ") / 6) * 6, 2, '0'), ':00')"
+		groupBy = "DATE_FORMAT(" + column + ", '%Y-%m-%d'), FLOOR(HOUR(" + column + ") / 6)"
+		return
+	}
+	selectExpr = "DATE_FORMAT(" + column + ", '%Y-%m-%d %H:00')"
+	groupBy = selectExpr
+	return
+}
+
 func (r *GatewayRepository) GetRequestTrend(ctx context.Context, hours int, clientID int64) ([]HourlyStat, error) {
 	args := []any{hours}
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
-
-	var groupBy string
-	var hourFormat string
-	if hours > 720 {
-		groupBy = "FLOOR(HOUR(CONVERT_TZ(created_at, '+00:00', '+08:00')) / 24), DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d')"
-		hourFormat = "'%Y-%m-%d 00:00'"
-	} else if hours > 168 {
-		groupBy = "FLOOR(HOUR(CONVERT_TZ(created_at, '+00:00', '+08:00')) / 6), DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d')"
-		hourFormat = "DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:00')"
-	} else {
-		groupBy = "DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:00')"
-		hourFormat = "'%Y-%m-%d %H:00'"
-	}
+	bucketExpr, groupBy := dashboardTrendBucketSQL("created_at", hours)
 
 	query := `
-		SELECT 
-			DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+08:00'), ` + hourFormat + `) as hour,
+		SELECT
+			` + bucketExpr + ` as hour,
 			COUNT(*) as total_count,
 			COALESCE(SUM(success), 0) as success_count,
 			COALESCE(AVG(latency_ms), 0) as avg_latency,
 			COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
 			COALESCE(SUM(completion_tokens), 0) as completion_tokens,
 			COALESCE(SUM(total_tokens), 0) as total_tokens
-		FROM request_log 
-		WHERE created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)`
+		FROM request_log
+		WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`
 	if clientID > 0 {
 		query += " AND client_id = ?"
 		args = append(args, clientID)
@@ -243,52 +252,19 @@ type KeyTrend struct {
 }
 
 func (r *GatewayRepository) GetRequestTrendByKey(ctx context.Context, hours int) ([]KeyTrend, error) {
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
-
-	var query string
-	var hourFormat string
-	if hours > 720 {
-		hourFormat = "'%Y-%m-%d 00:00'"
-		query = `
-			SELECT 
-				DATE_FORMAT(CONVERT_TZ(rl.created_at, '+00:00', '+08:00'), ` + hourFormat + `) as hour,
-				ac.name as key_name,
-				COUNT(*) as count,
-				COALESCE(SUM(rl.total_tokens), 0) as tokens
-			FROM request_log rl
-			INNER JOIN api_client ac ON rl.client_id = ac.id
-			WHERE rl.created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)
-			GROUP BY FLOOR(HOUR(CONVERT_TZ(rl.created_at, '+00:00', '+08:00')) / 24), DATE_FORMAT(CONVERT_TZ(rl.created_at, '+00:00', '+08:00'), '%Y-%m-%d'), ac.name
-			ORDER BY hour ASC, count DESC
-		`
-	} else if hours > 168 {
-		hourFormat = "DATE_FORMAT(CONVERT_TZ(rl.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:00')"
-		query = `
-			SELECT 
-				DATE_FORMAT(CONVERT_TZ(rl.created_at, '+00:00', '+08:00'), ` + hourFormat + `) as hour,
-				ac.name as key_name,
-				COUNT(*) as count,
-				COALESCE(SUM(rl.total_tokens), 0) as tokens
-			FROM request_log rl
-			INNER JOIN api_client ac ON rl.client_id = ac.id
-			WHERE rl.created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)
-			GROUP BY FLOOR(HOUR(CONVERT_TZ(rl.created_at, '+00:00', '+08:00')) / 6), DATE_FORMAT(CONVERT_TZ(rl.created_at, '+00:00', '+08:00'), '%Y-%m-%d'), ac.name
-			ORDER BY hour ASC, count DESC
-		`
-	} else {
-		query = `
-			SELECT 
-				DATE_FORMAT(CONVERT_TZ(rl.created_at, '+00:00', '+08:00'), '%Y-%m-%d %H:00') as hour,
-				ac.name as key_name,
-				COUNT(*) as count,
-				COALESCE(SUM(rl.total_tokens), 0) as tokens
-			FROM request_log rl
-			INNER JOIN api_client ac ON rl.client_id = ac.id
-			WHERE rl.created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)
-			GROUP BY hour, ac.name
-			ORDER BY hour ASC, count DESC
-		`
-	}
+	bucketExpr, groupBy := dashboardTrendBucketSQL("rl.created_at", hours)
+	query := `
+		SELECT
+			` + bucketExpr + ` as hour,
+			ac.name as key_name,
+			COUNT(*) as count,
+			COALESCE(SUM(rl.total_tokens), 0) as tokens
+		FROM request_log rl
+		INNER JOIN api_client ac ON rl.client_id = ac.id
+		WHERE rl.created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+		GROUP BY ` + groupBy + `, ac.name
+		ORDER BY hour ASC, count DESC
+	`
 	rows, err := r.db.QueryContext(ctx, query, hours)
 	if err != nil {
 		return nil, err
@@ -308,13 +284,12 @@ func (r *GatewayRepository) GetRequestTrendByKey(ctx context.Context, hours int)
 
 func (r *GatewayRepository) GetModelDistribution(ctx context.Context, hours int, clientID int64) ([]ModelStat, error) {
 	args := []any{hours}
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	query := `
 		SELECT 
 			COALESCE(virtual_model_code, upstream_model_name, 'unknown') as model_code,
 			COUNT(*) as count
 		FROM request_log 
-		WHERE created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)`
+		WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`
 	if clientID > 0 {
 		query += " AND client_id = ?"
 		args = append(args, clientID)
@@ -347,7 +322,6 @@ type KeyModelStat struct {
 }
 
 func (r *GatewayRepository) GetModelDistributionByKey(ctx context.Context, hours int) ([]KeyModelStat, error) {
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	query := `
 		SELECT 
 			COALESCE(ac.name, '未知') as key_name,
@@ -355,7 +329,7 @@ func (r *GatewayRepository) GetModelDistributionByKey(ctx context.Context, hours
 			COUNT(*) as count
 		FROM request_log rl
 		LEFT JOIN api_client ac ON rl.client_id = ac.id
-		WHERE rl.created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)
+		WHERE rl.created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
 		GROUP BY key_name, model_code
 		ORDER BY count DESC
 		LIMIT 20
@@ -379,13 +353,13 @@ func (r *GatewayRepository) GetModelDistributionByKey(ctx context.Context, hours
 
 func (r *GatewayRepository) CountSuccessRequests24h(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE success = 1 AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`).Scan(&count)
 	return count, err
 }
 
 func (r *GatewayRepository) AvgLatency24h(ctx context.Context) (int64, error) {
 	var avg sql.NullFloat64
-	err := r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&avg)
+	err := r.db.QueryRowContext(ctx, `SELECT AVG(latency_ms) FROM request_log WHERE latency_ms IS NOT NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`).Scan(&avg)
 	if err != nil {
 		return 0, err
 	}
@@ -397,7 +371,7 @@ func (r *GatewayRepository) AvgLatency24h(ctx context.Context) (int64, error) {
 
 func (r *GatewayRepository) CountDebugSessions24h(ctx context.Context) (int64, error) {
 	var count int64
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE is_debug_logged = 1 AND created_at >= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 24 HOUR)`).Scan(&count)
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_log WHERE is_debug_logged = 1 AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`).Scan(&count)
 	return count, err
 }
 
@@ -445,6 +419,34 @@ func (r *GatewayRepository) IncrementClientUsage(ctx context.Context, clientID i
 	_, err := r.db.ExecContext(ctx, `UPDATE api_client SET current_daily_requests = current_daily_requests + 1, current_monthly_requests = current_monthly_requests + 1, current_daily_tokens = current_daily_tokens + ?, current_monthly_tokens = current_monthly_tokens + ?, updated_at = ? WHERE id = ?`,
 		tokens, tokens, time.Now().UTC(), clientID)
 	return err
+}
+
+func (r *GatewayRepository) CheckAndIncrementUsage(ctx context.Context, clientID int64, dailyReqLimit, monthlyReqLimit, dailyTokenLimit, monthlyTokenLimit *int64) (bool, string, error) {
+	var currentDailyRequests, currentMonthlyRequests, currentDailyTokens, currentMonthlyTokens int64
+	err := r.db.QueryRowContext(ctx, `SELECT current_daily_requests, current_monthly_requests, current_daily_tokens, current_monthly_tokens FROM api_client WHERE id = ?`, clientID).Scan(&currentDailyRequests, &currentMonthlyRequests, &currentDailyTokens, &currentMonthlyTokens)
+	if err != nil {
+		return false, "", err
+	}
+
+	if dailyReqLimit != nil && currentDailyRequests >= *dailyReqLimit {
+		return false, "daily request limit exceeded", nil
+	}
+	if monthlyReqLimit != nil && currentMonthlyRequests >= *monthlyReqLimit {
+		return false, "monthly request limit exceeded", nil
+	}
+	if dailyTokenLimit != nil && currentDailyTokens >= *dailyTokenLimit {
+		return false, "daily token limit exceeded", nil
+	}
+	if monthlyTokenLimit != nil && currentMonthlyTokens >= *monthlyTokenLimit {
+		return false, "monthly token limit exceeded", nil
+	}
+
+	_, err = r.db.ExecContext(ctx, `UPDATE api_client SET current_daily_requests = current_daily_requests + 1, current_monthly_requests = current_monthly_requests + 1, updated_at = ? WHERE id = ?`,
+		time.Now().UTC(), clientID)
+	if err != nil {
+		return false, "", err
+	}
+	return true, "", nil
 }
 
 func (r *GatewayRepository) DisableClient(ctx context.Context, clientID int64) error {
@@ -678,29 +680,96 @@ func (r *GatewayRepository) ResolveOpenAIFallbackRoute(ctx context.Context, virt
 	return &item, nil
 }
 
+func (r *GatewayRepository) ListOpenAIFallbackRoutes(ctx context.Context, virtualModelID int64, excludeBindingIDs []int64) ([]ModelRoute, error) {
+	query := `
+		SELECT
+			vm.id,
+			vm.model_code,
+			vm.display_name,
+			vmb.id,
+			p.id,
+			p.name,
+			p.base_url,
+			p.auth_type,
+			vmb.upstream_model_name,
+			vmb.provider_key_id,
+			vmb.priority,
+			vmb.enabled,
+			vm.default_params_json
+		FROM virtual_model vm
+		INNER JOIN virtual_model_binding vmb ON vmb.virtual_model_id = vm.id
+		INNER JOIN provider p ON p.id = vmb.provider_id
+		LEFT JOIN circuit_breaker_state cbs ON cbs.provider_id = p.id AND cbs.virtual_model_id = vm.id
+		WHERE vm.id = ?
+		  AND vmb.enabled = 1
+		  AND p.enabled = 1
+		  AND (cbs.state IS NULL OR cbs.state <> 'open')`
+	args := []any{virtualModelID}
+	if len(excludeBindingIDs) > 0 {
+		query += ` AND vmb.id NOT IN (` + inClausePlaceholders(len(excludeBindingIDs)) + `)`
+		for _, id := range excludeBindingIDs {
+			args = append(args, id)
+		}
+	}
+	query += ` ORDER BY vmb.priority ASC, vmb.id ASC`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list openai fallback routes: %w", err)
+	}
+	defer rows.Close()
+	items := make([]ModelRoute, 0)
+	for rows.Next() {
+		var item ModelRoute
+		var bindingID sql.NullInt64
+		var providerKeyID sql.NullInt64
+		if err := rows.Scan(&item.VirtualModelID, &item.ModelCode, &item.DisplayName, &bindingID, &item.ProviderID, &item.ProviderName, &item.BaseURL, &item.AuthType, &item.UpstreamModelName, &providerKeyID, &item.BindingPriority, &item.BindingEnabled, &item.DefaultParamsJSON); err != nil {
+			return nil, fmt.Errorf("scan openai fallback route: %w", err)
+		}
+		if bindingID.Valid {
+			item.CurrentBindingID = &bindingID.Int64
+		}
+		if providerKeyID.Valid {
+			item.ProviderKeyID = &providerKeyID.Int64
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func inClausePlaceholders(count int) string {
+	if count <= 0 {
+		return ""
+	}
+	parts := make([]string, count)
+	for i := range parts {
+		parts[i] = "?"
+	}
+	return strings.Join(parts, ",")
+}
+
 func (r *GatewayRepository) InsertRequestLog(ctx context.Context, input RequestLogInput) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO request_log (trace_id, protocol_type, client_id, virtual_model_id, virtual_model_code, provider_id, provider_key_id, upstream_model_name, request_summary_json, response_summary_json, status_code, success, latency_ms, prompt_tokens, completion_tokens, total_tokens, error_code, error_message, is_debug_logged, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, input.TraceID, input.ProtocolType, nullableInt64(input.ClientID), nullableInt64(input.VirtualModelID), nullableString(input.VirtualModelCode), nullableInt64(input.ProviderID), nullableInt64(input.ProviderKeyID), nullableString(input.UpstreamModelName), normalizeJSON(input.RequestSummaryJSON), normalizeJSON(input.ResponseSummaryJSON), nullableInt(input.StatusCode), input.Success, nullableInt(input.LatencyMS), nullableInt(input.PromptTokens), nullableInt(input.CompletionTokens), nullableInt(input.TotalTokens), nullableString(input.ErrorCode), nullableString(input.ErrorMessage), input.IsDebugLogged, time.Now().UTC())
+	_, err := r.db.ExecContext(ctx, `INSERT INTO request_log (trace_id, protocol_type, client_id, virtual_model_id, virtual_model_code, requested_model, binding_id, provider_id, provider_key_id, upstream_model_name, request_summary_json, response_summary_json, status_code, success, latency_ms, prompt_tokens, completion_tokens, total_tokens, error_code, error_message, is_debug_logged, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, input.TraceID, input.ProtocolType, nullableInt64(input.ClientID), nullableInt64(input.VirtualModelID), nullableString(input.VirtualModelCode), nullableString(input.RequestedModel), nullableInt64(input.BindingID), nullableInt64(input.ProviderID), nullableInt64(input.ProviderKeyID), nullableString(input.UpstreamModelName), normalizeJSON(input.RequestSummaryJSON), normalizeJSON(input.ResponseSummaryJSON), nullableInt(input.StatusCode), input.Success, nullableInt(input.LatencyMS), nullableInt(input.PromptTokens), nullableInt(input.CompletionTokens), nullableInt(input.TotalTokens), nullableString(input.ErrorCode), nullableString(input.ErrorMessage), input.IsDebugLogged, time.Now())
 	return err
 }
 
 func (r *GatewayRepository) ListRequestLogs(ctx context.Context, filters RequestLogFilters) ([]RequestLogRecord, int, error) {
 	Log.Debug().Str("query", "ListRequestLogs").Msg("starting request logs query")
 	countQuery := `SELECT COUNT(*) FROM request_log WHERE 1=1`
-	query := `SELECT rl.id, rl.trace_id, rl.protocol_type, rl.client_id, COALESCE(ac.name, '') as key_name, rl.virtual_model_code, rl.provider_id, rl.upstream_model_name, rl.status_code, rl.success, rl.latency_ms, rl.prompt_tokens, rl.completion_tokens, rl.total_tokens, rl.error_code, rl.error_message, rl.request_summary_json, rl.created_at FROM request_log rl LEFT JOIN api_client ac ON rl.client_id = ac.id WHERE 1=1`
+	query := `SELECT rl.id, rl.trace_id, rl.protocol_type, rl.client_id, COALESCE(ac.name, '') as key_name, rl.virtual_model_id, rl.virtual_model_code, vm.display_name, rl.requested_model, rl.binding_id, vmb.upstream_model_name as route_name, rl.provider_id, p.name as provider_name, rl.upstream_model_name, rl.status_code, rl.success, rl.latency_ms, rl.prompt_tokens, rl.completion_tokens, rl.total_tokens, rl.error_code, rl.error_message, rl.request_summary_json, rl.created_at FROM request_log rl LEFT JOIN api_client ac ON rl.client_id = ac.id LEFT JOIN virtual_model vm ON rl.virtual_model_id = vm.id LEFT JOIN virtual_model_binding vmb ON rl.binding_id = vmb.id LEFT JOIN provider p ON rl.provider_id = p.id WHERE 1=1`
 	args := make([]any, 0)
 	if filters.ClientID != nil {
 		countQuery += ` AND client_id = ?`
-		query += ` AND client_id = ?`
+		query += ` AND rl.client_id = ?`
 		args = append(args, *filters.ClientID)
 	}
 	if filters.VirtualModelCode != "" {
 		countQuery += ` AND virtual_model_code = ?`
-		query += ` AND virtual_model_code = ?`
+		query += ` AND rl.virtual_model_code = ?`
 		args = append(args, filters.VirtualModelCode)
 	}
 	if filters.Success != nil {
 		countQuery += ` AND success = ?`
-		query += ` AND success = ?`
+		query += ` AND rl.success = ?`
 		args = append(args, *filters.Success)
 	}
 	if filters.TimeRange != "" {
@@ -717,18 +786,17 @@ func (r *GatewayRepository) ListRequestLogs(ctx context.Context, filters Request
 		case "7d":
 			hours = 168
 		}
-		beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
-		countQuery += ` AND created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)`
-		query += ` AND created_at >= DATE_SUB(` + beijingTime + `, INTERVAL ? HOUR)`
+		countQuery += ` AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`
+		query += ` AND rl.created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`
 		args = append(args, hours)
 	} else if filters.StartTime != nil {
 		countQuery += ` AND created_at >= ?`
-		query += ` AND created_at >= ?`
+		query += ` AND rl.created_at >= ?`
 		args = append(args, *filters.StartTime)
 	}
 	if filters.EndTime != nil {
 		countQuery += ` AND created_at <= ?`
-		query += ` AND created_at <= ?`
+		query += ` AND rl.created_at <= ?`
 		args = append(args, *filters.EndTime)
 	}
 	var total int
@@ -739,7 +807,7 @@ func (r *GatewayRepository) ListRequestLogs(ctx context.Context, filters Request
 		return []RequestLogRecord{}, 0, nil
 	}
 	offset := (filters.Page - 1) * filters.Limit
-	query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	query += ` ORDER BY rl.created_at DESC LIMIT ? OFFSET ?`
 	args = append(args, filters.Limit, offset)
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -749,10 +817,10 @@ func (r *GatewayRepository) ListRequestLogs(ctx context.Context, filters Request
 	items := make([]RequestLogRecord, 0)
 	for rows.Next() {
 		var item RequestLogRecord
-		var clientID, providerID sql.NullInt64
-		var keyName, modelCode, upstreamModel, errorCode, errorMessage, requestSummary sql.NullString
+		var clientID, virtualModelID, bindingID, providerID sql.NullInt64
+		var keyName, modelCode, virtualModelName, requestedModel, routeName, providerName, upstreamModel, errorCode, errorMessage, requestSummary sql.NullString
 		var statusCode, latency, promptTokens, completionTokens, totalTokens sql.NullInt64
-		if err := rows.Scan(&item.ID, &item.TraceID, &item.ProtocolType, &clientID, &keyName, &modelCode, &providerID, &upstreamModel, &statusCode, &item.Success, &latency, &promptTokens, &completionTokens, &totalTokens, &errorCode, &errorMessage, &requestSummary, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.TraceID, &item.ProtocolType, &clientID, &keyName, &virtualModelID, &modelCode, &virtualModelName, &requestedModel, &bindingID, &routeName, &providerID, &providerName, &upstreamModel, &statusCode, &item.Success, &latency, &promptTokens, &completionTokens, &totalTokens, &errorCode, &errorMessage, &requestSummary, &item.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		if clientID.Valid {
@@ -762,13 +830,37 @@ func (r *GatewayRepository) ListRequestLogs(ctx context.Context, filters Request
 		if keyName.Valid {
 			item.KeyName = keyName.String
 		}
-		if providerID.Valid {
-			v := providerID.Int64
-			item.ProviderID = &v
+		if virtualModelID.Valid {
+			v := virtualModelID.Int64
+			item.VirtualModelID = &v
 		}
 		if modelCode.Valid {
 			v := modelCode.String
 			item.VirtualModelCode = &v
+		}
+		if virtualModelName.Valid {
+			v := virtualModelName.String
+			item.VirtualModelName = &v
+		}
+		if requestedModel.Valid {
+			v := requestedModel.String
+			item.RequestedModel = &v
+		}
+		if bindingID.Valid {
+			v := bindingID.Int64
+			item.BindingID = &v
+		}
+		if routeName.Valid {
+			v := routeName.String
+			item.RouteName = &v
+		}
+		if providerID.Valid {
+			v := providerID.Int64
+			item.ProviderID = &v
+		}
+		if providerName.Valid {
+			v := providerName.String
+			item.ProviderName = &v
 		}
 		if upstreamModel.Valid {
 			v := upstreamModel.String
@@ -816,12 +908,12 @@ func (r *GatewayRepository) ListRequestLogs(ctx context.Context, filters Request
 }
 
 func (r *GatewayRepository) GetRequestLogByID(ctx context.Context, id int64) (*RequestLogRecord, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, trace_id, protocol_type, client_id, virtual_model_code, provider_id, upstream_model_name, status_code, success, latency_ms, error_code, error_message, created_at FROM request_log WHERE id = ? LIMIT 1`, id)
+	row := r.db.QueryRowContext(ctx, `SELECT rl.id, rl.trace_id, rl.protocol_type, rl.client_id, COALESCE(ac.name, ''), rl.virtual_model_id, rl.virtual_model_code, vm.display_name, rl.requested_model, rl.binding_id, vmb.upstream_model_name as route_name, rl.provider_id, p.name as provider_name, rl.upstream_model_name, rl.status_code, rl.success, rl.latency_ms, rl.prompt_tokens, rl.completion_tokens, rl.total_tokens, rl.error_code, rl.error_message, rl.request_summary_json, rl.response_summary_json, rl.created_at FROM request_log rl LEFT JOIN api_client ac ON rl.client_id = ac.id LEFT JOIN virtual_model vm ON rl.virtual_model_id = vm.id LEFT JOIN virtual_model_binding vmb ON rl.binding_id = vmb.id LEFT JOIN provider p ON rl.provider_id = p.id WHERE rl.id = ? LIMIT 1`, id)
 	var item RequestLogRecord
-	var clientID, providerID sql.NullInt64
-	var modelCode, upstreamModel, errorCode, errorMessage sql.NullString
-	var statusCode, latency sql.NullInt64
-	if err := row.Scan(&item.ID, &item.TraceID, &item.ProtocolType, &clientID, &modelCode, &providerID, &upstreamModel, &statusCode, &item.Success, &latency, &errorCode, &errorMessage, &item.CreatedAt); err != nil {
+	var clientID, virtualModelID, bindingID, providerID sql.NullInt64
+	var keyName, modelCode, virtualModelName, requestedModel, routeName, providerName, upstreamModel, errorCode, errorMessage, requestSummary, responseSummary sql.NullString
+	var statusCode, latency, promptTokens, completionTokens, totalTokens sql.NullInt64
+	if err := row.Scan(&item.ID, &item.TraceID, &item.ProtocolType, &clientID, &keyName, &virtualModelID, &modelCode, &virtualModelName, &requestedModel, &bindingID, &routeName, &providerID, &providerName, &upstreamModel, &statusCode, &item.Success, &latency, &promptTokens, &completionTokens, &totalTokens, &errorCode, &errorMessage, &requestSummary, &responseSummary, &item.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -831,13 +923,40 @@ func (r *GatewayRepository) GetRequestLogByID(ctx context.Context, id int64) (*R
 		v := clientID.Int64
 		item.ClientID = &v
 	}
-	if providerID.Valid {
-		v := providerID.Int64
-		item.ProviderID = &v
+	if keyName.Valid {
+		item.KeyName = keyName.String
+	}
+	if virtualModelID.Valid {
+		v := virtualModelID.Int64
+		item.VirtualModelID = &v
 	}
 	if modelCode.Valid {
 		v := modelCode.String
 		item.VirtualModelCode = &v
+	}
+	if virtualModelName.Valid {
+		v := virtualModelName.String
+		item.VirtualModelName = &v
+	}
+	if requestedModel.Valid {
+		v := requestedModel.String
+		item.RequestedModel = &v
+	}
+	if bindingID.Valid {
+		v := bindingID.Int64
+		item.BindingID = &v
+	}
+	if routeName.Valid {
+		v := routeName.String
+		item.RouteName = &v
+	}
+	if providerID.Valid {
+		v := providerID.Int64
+		item.ProviderID = &v
+	}
+	if providerName.Valid {
+		v := providerName.String
+		item.ProviderName = &v
 	}
 	if upstreamModel.Valid {
 		v := upstreamModel.String
@@ -851,6 +970,18 @@ func (r *GatewayRepository) GetRequestLogByID(ctx context.Context, id int64) (*R
 		v := int(latency.Int64)
 		item.LatencyMS = &v
 	}
+	if promptTokens.Valid {
+		v := int(promptTokens.Int64)
+		item.PromptTokens = &v
+	}
+	if completionTokens.Valid {
+		v := int(completionTokens.Int64)
+		item.CompletionTokens = &v
+	}
+	if totalTokens.Valid {
+		v := int(totalTokens.Int64)
+		item.TotalTokens = &v
+	}
 	if errorCode.Valid {
 		v := errorCode.String
 		item.ErrorCode = &v
@@ -858,6 +989,14 @@ func (r *GatewayRepository) GetRequestLogByID(ctx context.Context, id int64) (*R
 	if errorMessage.Valid {
 		v := errorMessage.String
 		item.ErrorMessage = &v
+	}
+	if requestSummary.Valid {
+		v := requestSummary.String
+		item.RequestSummary = &v
+	}
+	if responseSummary.Valid {
+		v := responseSummary.String
+		item.ResponseSummary = &v
 	}
 	return &item, nil
 }
@@ -898,7 +1037,6 @@ type KeyStat struct {
 }
 
 func (r *GatewayRepository) GetKeyStats(ctx context.Context, hours int) ([]KeyStat, error) {
-	beijingTime := "DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)"
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT 
 			ac.name as key_name,
@@ -906,7 +1044,7 @@ func (r *GatewayRepository) GetKeyStats(ctx context.Context, hours int) ([]KeySt
 			COALESCE(SUM(rl.total_tokens), 0) as total_tokens,
 			COALESCE(AVG(CASE WHEN rl.success = 1 THEN 1.0 ELSE 0.0 END), 0) as success_rate
 		FROM api_client ac
-		LEFT JOIN request_log rl ON ac.id = rl.client_id AND rl.created_at >= DATE_SUB(`+beijingTime+`, INTERVAL ? HOUR)
+		LEFT JOIN request_log rl ON ac.id = rl.client_id AND rl.created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
 		WHERE ac.status = 'active'
 		GROUP BY ac.id, ac.name
 		HAVING request_count > 0

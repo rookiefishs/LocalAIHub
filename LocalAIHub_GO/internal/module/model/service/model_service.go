@@ -44,6 +44,7 @@ func (s *ModelService) ListBindings(ctx context.Context, modelID int64) ([]repos
 	return s.repo.ListBindings(ctx, modelID)
 }
 func (s *ModelService) CreateBinding(ctx context.Context, item *repository.Binding, ip, userAgent string) (int64, error) {
+	item.Enabled = true
 	id, err := s.repo.CreateBinding(ctx, item)
 	if err == nil && s.audit != nil {
 		s.audit.Log(ctx, "binding.create", "virtual_model_binding", &id, map[string]any{"virtual_model_id": item.VirtualModelID, "provider_id": item.ProviderID}, ip, userAgent)
@@ -53,11 +54,19 @@ func (s *ModelService) CreateBinding(ctx context.Context, item *repository.Bindi
 
 func (s *ModelService) UpdateBinding(ctx context.Context, item *repository.Binding) error {
 	err := s.repo.UpdateBinding(ctx, item)
-	if err == nil && s.audit != nil {
+	if err != nil {
+		return err
+	}
+	if item.Priority == 1 && item.Enabled {
+		if err := s.repo.SetCurrentBinding(ctx, item.VirtualModelID, item.ID); err != nil {
+			return err
+		}
+	}
+	if s.audit != nil {
 		targetID := item.ID
 		s.audit.Log(ctx, "binding.update", "virtual_model_binding", &targetID, map[string]any{"priority": item.Priority}, "", "")
 	}
-	return err
+	return nil
 }
 
 func (s *ModelService) Delete(ctx context.Context, id int64, ip, userAgent string) error {

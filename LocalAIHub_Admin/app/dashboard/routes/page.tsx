@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/modal'
 import { PaginationBar } from '@/components/pagination-bar'
 import { useToast } from '@/components/ui/toast'
 import { useRefresh } from '@/components/refresh-context'
+import { describeTextMeaning } from '@/lib/utils'
 
 export default function RoutesPage() {
   const [routes, setRoutes] = useState<any[]>([])
@@ -30,6 +31,7 @@ export default function RoutesPage() {
   const [routeModalOpen, setRouteModalOpen] = useState(false)
   const [routeForm, setRouteForm] = useState({ model_code: '', model_name: '' })
   const [loadingCreateRoute, setLoadingCreateRoute] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
   const [loadingLock, setLoadingLock] = useState<number | null>(null)
   const [loadingBinding, setLoadingBinding] = useState(false)
   const [savingBindingOrder, setSavingBindingOrder] = useState(false)
@@ -43,13 +45,18 @@ export default function RoutesPage() {
   const { registerRefresh } = useRefresh()
 
   async function load() {
-    const [routesData, providersData] = await Promise.all([
-      api.routes(`page=${page}&page_size=${pageSize}`),
-      api.providers()
-    ])
-    setRoutes(routesData.items || [])
-    setTotal(routesData.total || 0)
-    setProviders(providersData.items || [])
+    setLoadingData(true)
+    try {
+      const [routesData, providersData] = await Promise.all([
+        api.routes(`page=${page}&page_size=${pageSize}`),
+        api.providers()
+      ])
+      setRoutes(routesData.items || [])
+      setTotal(routesData.total || 0)
+      setProviders(providersData.items || [])
+    } finally {
+      setLoadingData(false)
+    }
   }
 
   async function loadBindings(modelId: number) {
@@ -127,7 +134,7 @@ export default function RoutesPage() {
       setLoadingCreateRoute(true)
       await api.createModel({
         model_code: routeForm.model_code.trim(),
-        model_name: routeForm.model_name.trim() || routeForm.model_code.trim()
+        display_name: routeForm.model_name.trim() || routeForm.model_code.trim()
       })
       showSuccess('创建成功')
       setRouteModalOpen(false)
@@ -152,7 +159,7 @@ export default function RoutesPage() {
         ...bindingForm,
         priority: nextPriority,
         provider_id: Number(bindingForm.provider_id),
-        provider_key_id: bindingForm.provider_key_id || null
+        provider_key_id: bindingForm.provider_key_id || undefined
       })
       showSuccess('添加成功')
       setBindingModalOpen(false)
@@ -189,8 +196,13 @@ export default function RoutesPage() {
         enabled: binding.enabled,
         is_same_name: binding.is_same_name,
       })))
+      const refreshedSelectedRoute = (await api.routes(`page=${page}&page_size=${pageSize}`)).items?.find((item: any) => item.virtual_model_id === selectedRoute.virtual_model_id) || null
       showSuccess('绑定顺序已更新')
       await loadBindings(selectedRoute.virtual_model_id)
+      if (refreshedSelectedRoute) {
+        setSelectedRoute(refreshedSelectedRoute)
+      }
+      await load()
     } catch (err) {
       showError(err instanceof Error ? err.message : '绑定顺序保存失败')
       await loadBindings(selectedRoute.virtual_model_id)
@@ -250,10 +262,19 @@ export default function RoutesPage() {
         </div>
         <CardContent className="p-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {routes.length === 0 ? (
+            {loadingData ? (
+              <div className="col-span-full h-32 flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                  加载中...
+                </div>
+              </div>
+            ) : routes.length === 0 ? (
               <div className="col-span-full h-32 flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>暂无数据</div>
             ) : routes.map((item) => {
               const statusColor = item.manual_locked ? 'text-blue-400' : item.route_status === 'normal' ? 'text-emerald-400' : 'text-yellow-400'
+              const currentBindingText = item.current_binding_name ? `${item.current_binding_name} (#${item.current_binding_id})` : (item.current_binding_id ?? '-')
+              const switchReasonText = describeTextMeaning(item.last_switch_reason || (item.route_status === 'switched' ? 'auto_switch' : ''))
               return (
                 <div key={item.virtual_model_id} className="rounded-[10px] border p-4 cursor-pointer hover:border-[var(--accent)] transition-colors" style={{ borderColor: 'var(--border)' }} onClick={() => openDetail(item)}>
                   <div className="flex items-center justify-between gap-2">
@@ -270,8 +291,10 @@ export default function RoutesPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                    状态: {item.manual_locked ? '已锁定' : item.route_status === 'normal' ? '正常' : '降级中'}
+                  <div className="mt-2 space-y-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                    <div>状态: {item.manual_locked ? '已锁定' : item.route_status === 'normal' ? '正常' : '降级中'}</div>
+                    <div>当前绑定: {currentBindingText}</div>
+                    {item.route_status === 'switched' ? <div>切换原因: {switchReasonText}</div> : null}
                   </div>
                 </div>
               )
@@ -320,17 +343,21 @@ export default function RoutesPage() {
             </div>
             <div className="flex items-center gap-4">
               <label className="w-20 text-sm" style={{ color: 'var(--foreground)' }}>当前绑定</label>
-              <Input className="flex-1" value={selectedRoute.current_binding_id ?? '-'} readOnly />
+              <Input className="flex-1" value={selectedRoute.current_binding_name ? `${selectedRoute.current_binding_name} (#${selectedRoute.current_binding_id})` : (selectedRoute.current_binding_id ?? '-')} readOnly />
             </div>
             <div className="flex items-center gap-4">
               <label className="w-20 text-sm" style={{ color: 'var(--foreground)' }}>状态</label>
               <Input className="flex-1" value={selectedRoute.manual_locked ? '已锁定' : selectedRoute.route_status === 'normal' ? '正常' : '降级'} readOnly />
             </div>
             <div className="flex items-center gap-4">
+              <label className="w-20 text-sm" style={{ color: 'var(--foreground)' }}>切换原因</label>
+              <Input className="flex-1" value={describeTextMeaning(selectedRoute.last_switch_reason || (selectedRoute.route_status === 'switched' ? 'auto_switch' : ''))} readOnly />
+            </div>
+            <div className="flex items-center gap-4">
               <label className="w-20 text-sm" style={{ color: 'var(--foreground)' }}>最近切换</label>
               <Input className="flex-1" value={selectedRoute.last_switch_at ? new Date(selectedRoute.last_switch_at).toLocaleString() : '-'} readOnly />
             </div>
-            
+
             <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>绑定列表</span>

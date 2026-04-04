@@ -31,6 +31,15 @@ func (s *RouteService) Switch(ctx context.Context, virtualModelID, bindingID int
 	}
 	return err
 }
+
+func (s *RouteService) AutoSwitchCurrentBinding(ctx context.Context, virtualModelID, fromBindingID, toBindingID int64, reason string) error {
+	err := s.repo.AutoSwitchCurrentBinding(ctx, virtualModelID, fromBindingID, toBindingID, reason)
+	if err == nil && s.audit != nil {
+		targetID := virtualModelID
+		s.audit.Log(ctx, "route.auto_switch", "route_state", &targetID, map[string]any{"from_binding_id": fromBindingID, "to_binding_id": toBindingID, "reason": reason}, "", "")
+	}
+	return err
+}
 func (s *RouteService) Unlock(ctx context.Context, virtualModelID int64, ip, userAgent string) error {
 	err := s.repo.Unlock(ctx, virtualModelID)
 	if err == nil && s.audit != nil {
