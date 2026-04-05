@@ -21,6 +21,11 @@
 - Refactor: 代码重构
 - Reverted: 回滚操作
 
+## 2026/04/05
+
+- Added: 网关代理失败自动切换到后备绑定后，补充记录原始请求信息（method、path、rawBody、latency）到请求日志，提升故障排查能力。
+- Docs: 新增 `docs/CODE_REVIEW.md` 代码审查报告，记录项目架构、问题清单、整改建议与关键文件索引。
+
 ## 2026/04/04
 
 - Security: 管理后台登录新增 Refresh Token 刷新机制，前端在访问令牌过期后自动续签；后端配置移除明文管理员密码项，要求通过 `security.admin_password_hash` 提供哈希密码。

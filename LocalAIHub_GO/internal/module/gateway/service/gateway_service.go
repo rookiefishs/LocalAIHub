@@ -279,6 +279,10 @@ type proxyAttemptResult struct {
 	errorBody   []byte
 	errorMsg    string
 	statusCode  int
+	method      string
+	path        string
+	rawBody     []byte
+	latency     int
 }
 
 func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *repository.GatewayClient, method, path, rawQuery string, rawBody []byte, incomingHeaders http.Header) (*ProxyHTTPResult, error) {
@@ -321,6 +325,9 @@ func (s *GatewayService) ProxyOpenAIRequest(ctx context.Context, client *reposit
 				if switchErr := s.routeService.AutoSwitchCurrentBinding(ctx, route.VirtualModelID, *route.CurrentBindingID, *fallbackRoute.CurrentBindingID, "auto switch after proxy fallback success"); switchErr != nil {
 					logger.Log.Error().Err(switchErr).Int64("virtual_model_id", route.VirtualModelID).Int64("from_binding_id", *route.CurrentBindingID).Int64("to_binding_id", *fallbackRoute.CurrentBindingID).Msg("failed to auto switch route after proxy fallback success")
 				}
+			}
+			if fallbackAttempt.providerKey != nil && fallbackAttempt.latency > 0 {
+				s.logProxyRequest(ctx, client, &fallbackRoute, fallbackAttempt.providerKey, fallbackAttempt.method, fallbackAttempt.path, fallbackAttempt.rawBody, fallbackAttempt.result.StatusCode, true, fallbackAttempt.result.Body, &fallbackAttempt.latency, nil, nil)
 			}
 			return fallbackAttempt.result, nil
 		}
@@ -420,7 +427,13 @@ func (s *GatewayService) executeProxyAttempt(ctx context.Context, client *reposi
 	}
 	latency := int(time.Since(start).Milliseconds())
 	s.logProxyRequest(ctx, client, route, providerKey, method, path, rewrittenBody, resp.StatusCode, true, body, &latency, nil, nil)
-	return &proxyAttemptResult{result: &ProxyHTTPResult{StatusCode: resp.StatusCode, Headers: resp.Header.Clone(), Body: body}}, nil
+	return &proxyAttemptResult{
+		result:  &ProxyHTTPResult{StatusCode: resp.StatusCode, Headers: resp.Header.Clone(), Body: body},
+		method:  method,
+		path:    path,
+		rawBody: rewrittenBody,
+		latency: latency,
+	}, nil
 }
 
 func (s *GatewayService) handleStreamingProxyAttempt(ctx context.Context, client *repository.GatewayClient, route *repository.ModelRoute, providerKey *providerrepo.ProviderKey, method, path string, rawBody []byte, resp *http.Response, start time.Time) (*proxyAttemptResult, error) {
@@ -462,16 +475,23 @@ func (s *GatewayService) handleStreamingProxyAttempt(ctx context.Context, client
 		logger.Log.Error().Err(registerErr).Int64("provider_id", route.ProviderID).Int64("virtual_model_id", route.VirtualModelID).Msg("failed to register proxy route success for stream")
 	}
 	mergedBody := io.NopCloser(io.MultiReader(bytes.NewReader(prefix), resp.Body))
-	return &proxyAttemptResult{result: &ProxyHTTPResult{
-		StatusCode: resp.StatusCode,
-		Headers:    resp.Header.Clone(),
-		StreamBody: mergedBody,
-		IsStream:   true,
-		AfterStream: func(streamBody []byte) {
-			latency := int(time.Since(start).Milliseconds())
-			s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, true, streamBody, &latency, nil, nil)
+	latencyVal := int(time.Since(start).Milliseconds())
+	return &proxyAttemptResult{
+		result: &ProxyHTTPResult{
+			StatusCode: resp.StatusCode,
+			Headers:    resp.Header.Clone(),
+			StreamBody: mergedBody,
+			IsStream:   true,
+			AfterStream: func(streamBody []byte) {
+				latency := int(time.Since(start).Milliseconds())
+				s.logProxyRequest(ctx, client, route, providerKey, method, path, rawBody, resp.StatusCode, true, streamBody, &latency, nil, nil)
+			},
 		},
-	}}, nil
+		method:  method,
+		path:    path,
+		rawBody: rawBody,
+		latency: latencyVal,
+	}, nil
 }
 
 func buildOpenAIProxyURL(baseURL, path, rawQuery string) string {
