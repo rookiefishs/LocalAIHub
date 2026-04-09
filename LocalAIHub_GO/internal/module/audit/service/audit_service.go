@@ -21,8 +21,22 @@ func (s *AuditService) Log(ctx context.Context, action, targetType string, targe
 		logger.Log.Error().Err(err).Str("action", action).Str("target_type", targetType).Msg("failed to marshal audit payload")
 		raw = []byte("{}")
 	}
+
+	adminUserID := appctx.AdminUserID(ctx)
+	if adminUserID == 0 {
+		if targetType == "admin_user" && targetID != nil && *targetID > 0 {
+			adminUserID = *targetID
+		} else {
+			logger.Log.Warn().
+				Str("action", action).
+				Str("target_type", targetType).
+				Msg("skip audit log because operator admin user id is missing")
+			return
+		}
+	}
+
 	if err := s.repo.Create(ctx, repository.AuditLog{
-		AdminUserID:       appctx.AdminUserID(ctx),
+		AdminUserID:       adminUserID,
 		Action:            action,
 		TargetType:        targetType,
 		TargetID:          targetID,

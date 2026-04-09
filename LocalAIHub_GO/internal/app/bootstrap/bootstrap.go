@@ -69,7 +69,7 @@ func New() (*App, error) {
 	}
 	auditRepo := auditrepo.NewAuditRepository(db)
 	auditSvc := auditservice.NewAuditService(auditRepo)
-	authSvc := authservice.NewAuthService(adminRepo, cfg.Security.AdminSessionSecret, auditSvc)
+	authSvc := authservice.NewAuthService(adminRepo, cfg.Security.AdminSessionSecret, cfg.Security.RegistrationEnabled, auditSvc)
 
 	providerRepo := providerrepo.NewProviderRepository(db)
 	providerKeyRepo := providerkeyrepo.NewProviderKeyRepository(db)

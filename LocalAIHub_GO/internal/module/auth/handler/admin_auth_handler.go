@@ -67,6 +67,42 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type registerRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (h *AdminAuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req registerRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		response.AdminError(w, r, http.StatusBadRequest, 400100, "invalid parameters")
+		return
+	}
+
+	session, err := h.authService.Register(r.Context(), req.Username, req.Password, netx.ClientIP(r), r.UserAgent())
+	if err != nil {
+		if err == service.ErrUsernameTaken {
+			response.AdminError(w, r, http.StatusConflict, 409100, "username already taken")
+			return
+		}
+		if err == service.ErrRegistrationClosed {
+			response.AdminError(w, r, http.StatusForbidden, 403100, "registration is closed")
+			return
+		}
+		response.AdminError(w, r, http.StatusBadRequest, 400101, err.Error())
+		return
+	}
+
+	response.AdminSuccess(w, r, map[string]any{
+		"user": map[string]any{
+			"id":       session.AdminID,
+			"username": session.Username,
+		},
+		"token":         session.Token,
+		"refresh_token": session.RefreshToken,
+	})
+}
+
 func (h *AdminAuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
 	if err := httpx.DecodeJSON(r, &req); err != nil {

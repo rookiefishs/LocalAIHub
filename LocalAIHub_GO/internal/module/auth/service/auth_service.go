@@ -16,6 +16,8 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUnauthorized       = errors.New("unauthorized")
+	ErrUsernameTaken      = errors.New("username already taken")
+	ErrRegistrationClosed = errors.New("registration is closed")
 )
 
 type Session struct {
@@ -26,20 +28,22 @@ type Session struct {
 }
 
 type AuthService struct {
-	repo      *repository.AdminRepository
-	jwtSecret string
-	audit     interface {
+	repo                *repository.AdminRepository
+	jwtSecret           string
+	registrationEnabled bool
+	audit               interface {
 		Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
 	}
 }
 
-func NewAuthService(repo *repository.AdminRepository, jwtSecret string, audit interface {
+func NewAuthService(repo *repository.AdminRepository, jwtSecret string, registrationEnabled bool, audit interface {
 	Log(ctx context.Context, action, targetType string, targetID *int64, details map[string]any, ip, userAgent string)
 }) *AuthService {
 	return &AuthService{
-		repo:      repo,
-		jwtSecret: jwtSecret,
-		audit:     audit,
+		repo:                repo,
+		jwtSecret:           jwtSecret,
+		registrationEnabled: registrationEnabled,
+		audit:               audit,
 	}
 }
 
@@ -191,4 +195,53 @@ func (s *AuthService) Authenticate(tokenString string) (*Session, error) {
 
 func (s *AuthService) CurrentAdmin(ctx context.Context, adminID int64) (*repository.Admin, error) {
 	return s.repo.GetByID(ctx, adminID)
+}
+
+func (s *AuthService) Register(ctx context.Context, username, password, ip, userAgent string) (*Session, error) {
+	if !s.registrationEnabled {
+		return nil, ErrRegistrationClosed
+	}
+
+	if len(username) < 3 || len(username) > 64 {
+		return nil, fmt.Errorf("username must be between 3 and 64 characters")
+	}
+
+	if len(password) < 6 {
+		return nil, fmt.Errorf("password must be at least 6 characters")
+	}
+
+	existing, err := s.repo.GetByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, ErrUsernameTaken
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+
+	adminID, err := s.repo.CreateAdmin(ctx, username, string(passwordHash))
+	if err != nil {
+		return nil, fmt.Errorf("create admin: %w", err)
+	}
+
+	if s.audit != nil {
+		id := adminID
+		s.audit.Log(ctx, "register", "admin_user", &id, map[string]any{"username": username, "ip": ip}, ip, userAgent)
+	}
+
+	token, err := s.generateToken(adminID, username)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := s.generateRefreshToken(adminID, username)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Session{Token: token, RefreshToken: refreshToken, AdminID: adminID, Username: username}, nil
 }

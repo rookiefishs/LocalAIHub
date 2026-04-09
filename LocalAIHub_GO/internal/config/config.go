@@ -26,10 +26,11 @@ func (c ServerConfig) Address() string {
 }
 
 type SecurityConfig struct {
-	AdminSessionSecret string `yaml:"admin_session_secret"`
-	EncryptionKey      string `yaml:"encryption_key"`
-	AdminPasswordHash  string `yaml:"admin_password_hash"`
-	AllowInsecureTLS   bool   `yaml:"allow_insecure_tls"`
+	AdminSessionSecret  string `yaml:"admin_session_secret"`
+	EncryptionKey       string `yaml:"encryption_key"`
+	AdminPasswordHash   string `yaml:"admin_password_hash"`
+	AllowInsecureTLS    bool   `yaml:"allow_insecure_tls"`
+	RegistrationEnabled bool   `yaml:"registration_enabled"`
 }
 
 type DatabaseConfig struct {
@@ -111,6 +112,7 @@ func overrideFromEnv(cfg *Config) {
 	setString(&cfg.Security.EncryptionKey, "LOCALAIHUB_ENCRYPTION_KEY")
 	setString(&cfg.Security.AdminPasswordHash, "LOCALAIHUB_ADMIN_PASSWORD_HASH")
 	setBool(&cfg.Security.AllowInsecureTLS, "LOCALAIHUB_ALLOW_INSECURE_TLS")
+	setBool(&cfg.Security.RegistrationEnabled, "LOCALAIHUB_REGISTRATION_ENABLED")
 	setString(&cfg.Database.Driver, "LOCALAIHUB_DB_DRIVER")
 	setString(&cfg.Database.DSN, "LOCALAIHUB_DB_DSN")
 	setString(&cfg.Database.InitSQLPath, "LOCALAIHUB_DB_INIT_SQL_PATH")
@@ -138,6 +140,9 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Database.MaxConnIdleTime == 0 {
 		cfg.Database.MaxConnIdleTime = 10
+	}
+	if !cfg.Security.RegistrationEnabled {
+		cfg.Security.RegistrationEnabled = false
 	}
 }
 

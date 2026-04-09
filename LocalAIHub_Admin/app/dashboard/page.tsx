@@ -435,8 +435,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {selectedKey === 'all' && keyStatsData.length > 0 && (
-          <Card>
+        <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>各 Key 使用情况</CardTitle>
@@ -470,7 +469,7 @@ export default function DashboardPage() {
                       <div className="text-xs" style={{ color: 'var(--muted-foreground)' }}>成功率</div>
                     </div>
                   </div>
-                ))}
+                  ))}
                 </div>
               ) : (
                 <div className="flex h-[280px] items-center justify-center rounded-[10px] border border-dashed text-sm" style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
@@ -479,7 +478,6 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
-        )}
 
         {selectedKey !== 'all' && (
           <Card>

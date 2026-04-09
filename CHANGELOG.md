@@ -1,7 +1,7 @@
 <!--
  * @Author: rookiefish <3209605851@qq.com>
  * @Date: 2026-03-30
- * @LastEditTime: 2026-04-01
+ * @LastEditTime: 2026-04-09 22:30:00
  * @LastEditors: rookiefish <3209605851@qq.com>
  * @Description: LocalAIHub 项目更新日志
 -->
@@ -20,6 +20,12 @@
 - Docs: 文档更新
 - Refactor: 代码重构
 - Reverted: 回滚操作
+
+## 2026/04/09
+
+- Added: 后端新增管理员注册开关与 `POST /admin/api/v1/auth/register` 接口，支持在开启注册时创建管理员账号并直接返回登录态。
+- Fixed: 审计日志在缺少上下文管理员 ID 时，允许注册场景回退使用目标管理员 ID，避免注册成功后审计记录缺失。
+- Changed: Dashboard 的 API Key 统计卡片改为在页面中持续保留容器，并移除请求次数聚合查询中的 `HAVING request_count > 0` 限制，便于空数据场景保持布局稳定。
 
 ## 2026/04/06
 

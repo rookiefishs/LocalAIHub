@@ -73,31 +73,31 @@ type RequestLogInput struct {
 }
 
 type RequestLogRecord struct {
-	ID                int64     `json:"id"`
-	TraceID           string    `json:"trace_id"`
-	ProtocolType      string    `json:"protocol_type"`
-	ClientID          *int64    `json:"client_id,omitempty"`
-	KeyName           string    `json:"key_name,omitempty"`
-	VirtualModelID    *int64    `json:"virtual_model_id,omitempty"`
-	VirtualModelCode  *string   `json:"virtual_model_code,omitempty"`
-	VirtualModelName  *string   `json:"virtual_model_name,omitempty"`
-	RequestedModel    *string   `json:"requested_model,omitempty"`
-	BindingID         *int64    `json:"binding_id,omitempty"`
-	RouteName         *string   `json:"route_name,omitempty"`
-	ProviderID        *int64    `json:"provider_id,omitempty"`
-	ProviderName      *string   `json:"provider_name,omitempty"`
-	UpstreamModel     *string   `json:"upstream_model_name,omitempty"`
-	StatusCode        *int      `json:"status_code,omitempty"`
-	Success           bool      `json:"success"`
-	LatencyMS         *int      `json:"latency_ms,omitempty"`
-	PromptTokens      *int      `json:"prompt_tokens,omitempty"`
-	CompletionTokens  *int      `json:"completion_tokens,omitempty"`
-	TotalTokens       *int      `json:"total_tokens,omitempty"`
-	ErrorCode         *string   `json:"error_code,omitempty"`
-	ErrorMessage      *string   `json:"error_message,omitempty"`
-	RequestSummary    *string   `json:"request_summary,omitempty"`
-	ResponseSummary   *string   `json:"response_summary,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID               int64     `json:"id"`
+	TraceID          string    `json:"trace_id"`
+	ProtocolType     string    `json:"protocol_type"`
+	ClientID         *int64    `json:"client_id,omitempty"`
+	KeyName          string    `json:"key_name,omitempty"`
+	VirtualModelID   *int64    `json:"virtual_model_id,omitempty"`
+	VirtualModelCode *string   `json:"virtual_model_code,omitempty"`
+	VirtualModelName *string   `json:"virtual_model_name,omitempty"`
+	RequestedModel   *string   `json:"requested_model,omitempty"`
+	BindingID        *int64    `json:"binding_id,omitempty"`
+	RouteName        *string   `json:"route_name,omitempty"`
+	ProviderID       *int64    `json:"provider_id,omitempty"`
+	ProviderName     *string   `json:"provider_name,omitempty"`
+	UpstreamModel    *string   `json:"upstream_model_name,omitempty"`
+	StatusCode       *int      `json:"status_code,omitempty"`
+	Success          bool      `json:"success"`
+	LatencyMS        *int      `json:"latency_ms,omitempty"`
+	PromptTokens     *int      `json:"prompt_tokens,omitempty"`
+	CompletionTokens *int      `json:"completion_tokens,omitempty"`
+	TotalTokens      *int      `json:"total_tokens,omitempty"`
+	ErrorCode        *string   `json:"error_code,omitempty"`
+	ErrorMessage     *string   `json:"error_message,omitempty"`
+	RequestSummary   *string   `json:"request_summary,omitempty"`
+	ResponseSummary  *string   `json:"response_summary,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type RequestLogFilters struct {
@@ -1047,7 +1047,6 @@ func (r *GatewayRepository) GetKeyStats(ctx context.Context, hours int) ([]KeySt
 		LEFT JOIN request_log rl ON ac.id = rl.client_id AND rl.created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
 		WHERE ac.status = 'active'
 		GROUP BY ac.id, ac.name
-		HAVING request_count > 0
 		ORDER BY request_count DESC
 	`, hours)
 	if err != nil {

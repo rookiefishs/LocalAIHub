@@ -47,6 +47,7 @@ func New(handlers Handlers, authService *authservice.AuthService, allowedOrigins
 	}
 
 	mux.HandleFunc("GET /healthz", healthHandler.Healthz)
+	mux.HandleFunc("POST /admin/api/v1/auth/register", handlers.Auth.Register)
 	mux.HandleFunc("POST /admin/api/v1/auth/login", handlers.Auth.Login)
 	mux.HandleFunc("POST /admin/api/v1/auth/refresh", handlers.Auth.RefreshToken)
 	mux.Handle("GET /admin/api/v1/auth/me", adminAuthMiddleware(authService, http.HandlerFunc(handlers.Auth.Me)))
