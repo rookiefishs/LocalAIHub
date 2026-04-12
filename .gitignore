@@ -38,6 +38,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.sublime-*
+.claude/
 
 # Database
 *.db
@@ -48,6 +49,7 @@ Thumbs.db
 bin/
 *.exe
 localaihub.exe
+LocalAIHub_GO/localaihub
 
 # Test
 coverage/
