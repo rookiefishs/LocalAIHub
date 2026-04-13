@@ -72,6 +72,29 @@ type RequestLogInput struct {
 	IsDebugLogged       bool
 }
 
+type RequestAttemptLogInput struct {
+	TraceID             string
+	ProtocolType        string
+	ClientID            *int64
+	VirtualModelID      *int64
+	VirtualModelCode    *string
+	RequestedModel      *string
+	BindingID           *int64
+	ProviderID          *int64
+	ProviderKeyID       *int64
+	UpstreamModelName   *string
+	AttemptLevel        string
+	AttemptOrder        int
+	TriggerReason       string
+	RequestSummaryJSON  json.RawMessage
+	ResponseSummaryJSON json.RawMessage
+	StatusCode          *int
+	Success             bool
+	LatencyMS           *int
+	ErrorCode           *string
+	ErrorMessage        *string
+}
+
 type RequestLogRecord struct {
 	ID               int64     `json:"id"`
 	TraceID          string    `json:"trace_id"`
@@ -745,6 +768,11 @@ func inClausePlaceholders(count int) string {
 		parts[i] = "?"
 	}
 	return strings.Join(parts, ",")
+}
+
+func (r *GatewayRepository) InsertRequestAttemptLog(ctx context.Context, input RequestAttemptLogInput) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO request_attempt_log (trace_id, protocol_type, client_id, virtual_model_id, virtual_model_code, requested_model, binding_id, provider_id, provider_key_id, upstream_model_name, attempt_level, attempt_order, trigger_reason, request_summary_json, response_summary_json, status_code, success, latency_ms, error_code, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, input.TraceID, input.ProtocolType, nullableInt64(input.ClientID), nullableInt64(input.VirtualModelID), nullableString(input.VirtualModelCode), nullableString(input.RequestedModel), nullableInt64(input.BindingID), nullableInt64(input.ProviderID), nullableInt64(input.ProviderKeyID), nullableString(input.UpstreamModelName), input.AttemptLevel, input.AttemptOrder, input.TriggerReason, normalizeJSON(input.RequestSummaryJSON), normalizeJSON(input.ResponseSummaryJSON), nullableInt(input.StatusCode), input.Success, nullableInt(input.LatencyMS), nullableString(input.ErrorCode), nullableString(input.ErrorMessage), time.Now())
+	return err
 }
 
 func (r *GatewayRepository) InsertRequestLog(ctx context.Context, input RequestLogInput) error {
