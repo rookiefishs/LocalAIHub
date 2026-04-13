@@ -26,6 +26,7 @@
 - Fixed: 修复仪表盘 30 秒自动刷新仍使用初始筛选条件的问题，手动刷新与定时刷新都会沿用当前选中的时间范围和 API Key。
 - Changed: 仪表盘趋势统计调整为 7 天及以上按天聚合与展示，统一后端分桶/补桶规则，并优化前端横轴标签显示。
 - Fixed: 修复仪表盘 30 天范围下趋势图数据展示异常的问题，保证 7 天与 30 天场景的趋势图和按 Key 趋势图按天连续展示。
+- Fixed: 修复仪表盘长周期趋势统计查询在 7 天与 30 天范围下返回空值的问题，统一后端时间分桶 SQL 与补桶键格式，确保请求趋势和 Token 趋势稳定返回数组数据。
 - Fixed: 后端管理员初始化改为以数据库管理员记录为准，仅在数据库中无管理员时才要求 `security.admin_password_hash` 作为首次初始化种子，避免启动时覆盖数据库中的管理员密码。
 - Fixed: 网关请求链路补充同 provider 下多 API Key 顺序 fallback，覆盖 OpenAI、Anthropic、Gemini 与透明代理请求，并在路由锁定时避免自动持久切换当前 binding。
 - Added: 新增请求尝试级日志 `request_attempt_log`，补齐 OpenAI Chat / Responses、Anthropic、Gemini 与透明代理链路的每次 provider key 尝试成功/失败记录，支持通过 `trace_id` 串联最终请求日志与尝试明细。

@@ -152,6 +152,13 @@ func trendBucketStepHours(hours int) int {
 	return 1
 }
 
+func trendBucketKey(t time.Time, stepHours int) string {
+	if stepHours >= 24 {
+		return t.Format("2006-01-02 00:00")
+	}
+	return t.Format("2006-01-02 15:00")
+}
+
 func fillHourlyTrendData(items []gatewayrepo.HourlyStat, hours int) []gatewayrepo.HourlyStat {
 	if hours <= 0 {
 		return items
@@ -170,7 +177,7 @@ func fillHourlyTrendData(items []gatewayrepo.HourlyStat, hours int) []gatewayrep
 	start := now.Add(-time.Duration(bucketCount-1) * time.Duration(stepHours) * time.Hour)
 	filled := make([]gatewayrepo.HourlyStat, 0, bucketCount)
 	for current := start; !current.After(now); current = current.Add(time.Duration(stepHours) * time.Hour) {
-		key := current.Format("2006-01-02 15:00")
+		key := trendBucketKey(current, stepHours)
 		if item, ok := byHour[key]; ok {
 			filled = append(filled, item)
 			continue
@@ -204,7 +211,7 @@ func fillHourlyKeyTrendData(items []gatewayrepo.KeyTrend, hours int) []gatewayre
 	start := now.Add(-time.Duration(bucketCount-1) * time.Duration(stepHours) * time.Hour)
 	filled := make([]gatewayrepo.KeyTrend, 0, bucketCount*len(keyNames))
 	for current := start; !current.After(now); current = current.Add(time.Duration(stepHours) * time.Hour) {
-		hourKey := current.Format("2006-01-02 15:00")
+		hourKey := trendBucketKey(current, stepHours)
 		for _, keyName := range keyNames {
 			lookupKey := keyName + "|" + hourKey
 			if item, ok := byKeyHour[lookupKey]; ok {
