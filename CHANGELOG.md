@@ -29,6 +29,7 @@
 - Fixed: 后端管理员初始化改为以数据库管理员记录为准，仅在数据库中无管理员时才要求 `security.admin_password_hash` 作为首次初始化种子，避免启动时覆盖数据库中的管理员密码。
 - Fixed: 网关请求链路补充同 provider 下多 API Key 顺序 fallback，覆盖 OpenAI、Anthropic、Gemini 与透明代理请求，并在路由锁定时避免自动持久切换当前 binding。
 - Added: 新增请求尝试级日志 `request_attempt_log`，补齐 OpenAI Chat / Responses、Anthropic、Gemini 与透明代理链路的每次 provider key 尝试成功/失败记录，支持通过 `trace_id` 串联最终请求日志与尝试明细。
+- Fixed: 模型绑定的 `is_same_name` 开关改为真正参与运行时转发决策，支持按配置在“透传用户请求模型名”和“使用 upstream_model_name 重写模型名”之间切换，并同步修正日志中的实际上游模型名记录。
 
 ## 2026/04/09
 

@@ -42,6 +42,7 @@ type ModelRoute struct {
 	BaseURL           string
 	AuthType          string
 	UpstreamModelName string
+	IsSameName        bool
 	ProviderKeyID     *int64
 	BindingPriority   int
 	BindingEnabled    bool
@@ -546,6 +547,7 @@ func (r *GatewayRepository) resolveOpenAIModelRoute(ctx context.Context, modelCo
 				p.base_url,
 				p.auth_type,
 				vmb.upstream_model_name,
+				vmb.is_same_name,
 				vmb.provider_key_id,
 				vmb.priority,
 				vmb.enabled,
@@ -569,6 +571,7 @@ func (r *GatewayRepository) resolveOpenAIModelRoute(ctx context.Context, modelCo
 				p.base_url,
 				p.auth_type,
 				vmb.upstream_model_name,
+				vmb.is_same_name,
 				vmb.provider_key_id,
 				vmb.priority,
 				vmb.enabled,
@@ -587,7 +590,7 @@ func (r *GatewayRepository) resolveOpenAIModelRoute(ctx context.Context, modelCo
 	var currentBindingID sql.NullInt64
 	var providerKeyID sql.NullInt64
 	var bindingID sql.NullInt64
-	err := row.Scan(&item.VirtualModelID, &item.ModelCode, &item.DisplayName, &currentBindingID, &item.ProviderID, &item.ProviderName, &item.BaseURL, &item.AuthType, &item.UpstreamModelName, &providerKeyID, &item.BindingPriority, &item.BindingEnabled, &item.DefaultParamsJSON)
+	err := row.Scan(&item.VirtualModelID, &item.ModelCode, &item.DisplayName, &currentBindingID, &item.ProviderID, &item.ProviderName, &item.BaseURL, &item.AuthType, &item.UpstreamModelName, &item.IsSameName, &providerKeyID, &item.BindingPriority, &item.BindingEnabled, &item.DefaultParamsJSON)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -687,7 +690,7 @@ func (r *GatewayRepository) ResolveOpenAIFallbackRoute(ctx context.Context, virt
 	var item ModelRoute
 	var currentBindingID sql.NullInt64
 	var providerKeyID sql.NullInt64
-	err := row.Scan(&item.VirtualModelID, &item.ModelCode, &item.DisplayName, &currentBindingID, &item.ProviderID, &item.ProviderName, &item.BaseURL, &item.AuthType, &item.UpstreamModelName, &providerKeyID, &item.BindingPriority, &item.BindingEnabled, &item.DefaultParamsJSON)
+	err := row.Scan(&item.VirtualModelID, &item.ModelCode, &item.DisplayName, &currentBindingID, &item.ProviderID, &item.ProviderName, &item.BaseURL, &item.AuthType, &item.UpstreamModelName, &item.IsSameName, &providerKeyID, &item.BindingPriority, &item.BindingEnabled, &item.DefaultParamsJSON)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -745,7 +748,7 @@ func (r *GatewayRepository) ListOpenAIFallbackRoutes(ctx context.Context, virtua
 		var item ModelRoute
 		var bindingID sql.NullInt64
 		var providerKeyID sql.NullInt64
-		if err := rows.Scan(&item.VirtualModelID, &item.ModelCode, &item.DisplayName, &bindingID, &item.ProviderID, &item.ProviderName, &item.BaseURL, &item.AuthType, &item.UpstreamModelName, &providerKeyID, &item.BindingPriority, &item.BindingEnabled, &item.DefaultParamsJSON); err != nil {
+		if err := rows.Scan(&item.VirtualModelID, &item.ModelCode, &item.DisplayName, &bindingID, &item.ProviderID, &item.ProviderName, &item.BaseURL, &item.AuthType, &item.UpstreamModelName, &item.IsSameName, &providerKeyID, &item.BindingPriority, &item.BindingEnabled, &item.DefaultParamsJSON); err != nil {
 			return nil, fmt.Errorf("scan openai fallback route: %w", err)
 		}
 		if bindingID.Valid {
