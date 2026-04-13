@@ -190,12 +190,12 @@ type ModelStat struct {
 }
 
 func dashboardTrendBucketSQL(column string, hours int) (selectExpr, groupBy string) {
-	if hours > 720 {
+	if hours >= 168 {
 		selectExpr = "DATE_FORMAT(" + column + ", '%Y-%m-%d 00:00')"
 		groupBy = "DATE_FORMAT(" + column + ", '%Y-%m-%d')"
 		return
 	}
-	if hours > 168 {
+	if hours > 72 {
 		selectExpr = "CONCAT(DATE_FORMAT(" + column + ", '%Y-%m-%d '), LPAD(FLOOR(HOUR(" + column + ") / 6) * 6, 2, '0'), ':00')"
 		groupBy = "DATE_FORMAT(" + column + ", '%Y-%m-%d'), FLOOR(HOUR(" + column + ") / 6)"
 		return

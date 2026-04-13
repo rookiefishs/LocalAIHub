@@ -143,10 +143,10 @@ func (h *DashboardHandler) DashboardOverview(w http.ResponseWriter, r *http.Requ
 }
 
 func trendBucketStepHours(hours int) int {
-	if hours > 720 {
+	if hours >= 168 {
 		return 24
 	}
-	if hours > 168 {
+	if hours > 72 {
 		return 6
 	}
 	return 1

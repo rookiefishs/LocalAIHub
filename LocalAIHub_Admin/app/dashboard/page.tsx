@@ -22,6 +22,9 @@ function formatTrendLabel(hour: string, timeRange: string) {
   }
   const [year, month, day] = datePart.split('-')
   if (!year || !month || !day) return hour
+  if (timeRange === '7d' || timeRange === '30d') {
+    return `${month}-${day}`
+  }
   return `${month}-${day} ${timePart}`.trim()
 }
 
@@ -48,12 +51,18 @@ export default function DashboardPage() {
     }
   }
 
-  async function loadDashboard() {
+  const hours = useMemo(() => (
+    timeRange === '1d' ? 24 : timeRange === '3d' ? 72 : timeRange === '7d' ? 168 : 720
+  ), [timeRange])
+
+  const dashboardQuery = useMemo(() => (
+    `hours=${hours}${selectedKey !== 'all' ? `&client_id=${selectedKey}` : ''}`
+  ), [hours, selectedKey])
+
+  const loadDashboard = useCallback(async () => {
     setLoading(true)
     try {
-      const hours = timeRange === '1d' ? 24 : timeRange === '3d' ? 72 : timeRange === '7d' ? 168 : 720
-      const query = `hours=${hours}${selectedKey !== 'all' ? `&client_id=${selectedKey}` : ''}`
-      const result = await api.dashboard(query)
+      const result = await api.dashboard(dashboardQuery)
       setData(result)
       setError('')
     } catch (err) {
@@ -61,7 +70,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [dashboardQuery])
 
   useEffect(() => {
     loadClientKeys()
@@ -69,18 +78,18 @@ export default function DashboardPage() {
 
   useEffect(() => {
     registerRefresh(loadDashboard)
-  }, [registerRefresh])
+  }, [registerRefresh, loadDashboard])
 
   useEffect(() => {
     loadDashboard()
-  }, [timeRange, selectedKey])
+  }, [loadDashboard])
 
   useEffect(() => {
     const timer = setInterval(() => {
       loadDashboard()
     }, 30000)
     return () => clearInterval(timer)
-  }, [])
+  }, [loadDashboard])
 
   const selectedKeyName = selectedKey === 'all' 
     ? '全部' 
