@@ -17,6 +17,11 @@ import (
 	"localaihub/localaihub_go/internal/pkg/logger"
 )
 
+type ProviderKeyCandidate struct {
+	Key    *repository.ProviderKey
+	Secret string
+}
+
 type ProviderKeyService struct {
 	repo           *repository.ProviderKeyRepository
 	providerRepo   *repository.ProviderRepository
@@ -24,7 +29,6 @@ type ProviderKeyService struct {
 	audit          *auditservice.AuditService
 	defaultTimeout time.Duration
 }
-
 func NewProviderKeyService(repo *repository.ProviderKeyRepository, providerRepo *repository.ProviderRepository, encryptionKey string, audit *auditservice.AuditService, defaultTimeout time.Duration) *ProviderKeyService {
 	return &ProviderKeyService{repo: repo, providerRepo: providerRepo, encryptionKey: encryptionKey, audit: audit, defaultTimeout: defaultTimeout}
 }
@@ -113,9 +117,30 @@ func (s *ProviderKeyService) SelectForRequest(ctx context.Context, providerID in
 	return item, secret, nil
 }
 
+
 func (s *ProviderKeyService) ReportResult(ctx context.Context, id int64, success bool, errorMessage string) error {
 	return s.repo.MarkResult(ctx, id, success, errorMessage)
 }
+
+func (s *ProviderKeyService) ListCandidatesForRequest(ctx context.Context, providerID int64) ([]ProviderKeyCandidate, error) {
+	items, err := s.repo.ListEnabledByProviderID(ctx, providerID)
+	if err != nil {
+		logger.Log.Error().Err(err).Int64("provider_id", providerID).Msg("list enabled provider keys error")
+		return nil, err
+	}
+	candidates := make([]ProviderKeyCandidate, 0, len(items))
+	for i := range items {
+		secret, err := decodeSecret(items[i].SecretEncrypted, s.encryptionKey)
+		if err != nil {
+			logger.Log.Error().Err(err).Int64("provider_id", providerID).Int64("key_id", items[i].ID).Msg("decode provider key secret failed")
+			continue
+		}
+		item := items[i]
+		candidates = append(candidates, ProviderKeyCandidate{Key: &item, Secret: secret})
+	}
+	return candidates, nil
+}
+
 
 func (s *ProviderKeyService) Delete(ctx context.Context, id int64, ip, userAgent string) error {
 	err := s.repo.Delete(ctx, id)

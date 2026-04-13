@@ -55,6 +55,14 @@ func (r *AdminRepository) GetByID(ctx context.Context, id int64) (*Admin, error)
 	return &admin, nil
 }
 
+func (r *AdminRepository) HasAnyAdmin(ctx context.Context) (bool, error) {
+	var count int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_user`).Scan(&count); err != nil {
+		return false, fmt.Errorf("count admins: %w", err)
+	}
+	return count > 0, nil
+}
+
 func (r *AdminRepository) UpdateLastLogin(ctx context.Context, adminID int64, ip string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE admin_user SET last_login_at = ?, last_login_ip = ?, updated_at = ? WHERE id = ?`, time.Now().UTC(), ip, time.Now().UTC(), adminID)
 	if err != nil {
@@ -77,10 +85,6 @@ func (r *AdminRepository) EnsureDefaultAdmin(ctx context.Context, username, pass
 		return fmt.Errorf("count default admin: %w", err)
 	}
 	if count > 0 {
-		_, err := r.db.ExecContext(ctx, `UPDATE admin_user SET password_hash = ?, password_algo = 'bcrypt', status = 'active', updated_at = ? WHERE username = ?`, passwordHash, time.Now().UTC(), username)
-		if err != nil {
-			return fmt.Errorf("update default admin password: %w", err)
-		}
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx, `INSERT INTO admin_user (username, password_hash, password_algo, status, created_at, updated_at) VALUES (?, ?, 'bcrypt', 'active', ?, ?)`, username, passwordHash, time.Now().UTC(), time.Now().UTC())

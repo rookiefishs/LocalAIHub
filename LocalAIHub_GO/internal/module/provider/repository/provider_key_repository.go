@@ -51,6 +51,23 @@ func (r *ProviderKeyRepository) ListByProviderID(ctx context.Context, providerID
 	return items, rows.Err()
 }
 
+func (r *ProviderKeyRepository) ListEnabledByProviderID(ctx context.Context, providerID int64) ([]ProviderKey, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, provider_id, key_masked, secret_encrypted, status, priority, fail_count, last_used_at, last_error_at, last_error_message, remark, created_at, updated_at FROM provider_key WHERE provider_id = ? AND status = 'enabled' ORDER BY priority ASC, id ASC`, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]ProviderKey, 0)
+	for rows.Next() {
+		item, err := scanProviderKey(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	return items, rows.Err()
+}
+
 func (r *ProviderKeyRepository) GetByID(ctx context.Context, id int64) (*ProviderKey, error) {
 	row := r.db.QueryRowContext(ctx, `SELECT id, provider_id, key_masked, secret_encrypted, status, priority, fail_count, last_used_at, last_error_at, last_error_message, remark, created_at, updated_at FROM provider_key WHERE id = ?`, id)
 	return scanProviderKey(row)

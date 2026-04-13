@@ -58,14 +58,19 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("init mysql: %w", err)
 	}
 
-	passwordHash := cfg.Security.AdminPasswordHash
-	if passwordHash == "" {
-		return nil, fmt.Errorf("admin password is required: please set security.admin_password_hash in config")
-	}
-
 	adminRepo := authrepo.NewAdminRepository(db)
-	if err := adminRepo.EnsureDefaultAdmin(ctx, "admin", passwordHash); err != nil {
-		return nil, fmt.Errorf("ensure default admin: %w", err)
+	hasAdmin, err := adminRepo.HasAnyAdmin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check admins: %w", err)
+	}
+	if !hasAdmin {
+		passwordHash := cfg.Security.AdminPasswordHash
+		if passwordHash == "" {
+			return nil, fmt.Errorf("admin initialization password is required when no admin exists: please set security.admin_password_hash in config")
+		}
+		if err := adminRepo.EnsureDefaultAdmin(ctx, "admin", passwordHash); err != nil {
+			return nil, fmt.Errorf("ensure default admin: %w", err)
+		}
 	}
 	auditRepo := auditrepo.NewAuditRepository(db)
 	auditSvc := auditservice.NewAuditService(auditRepo)
